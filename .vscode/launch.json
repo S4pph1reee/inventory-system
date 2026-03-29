@@ -12,7 +12,7 @@
             "environment": [],
             "externalConsole": true, 
             "MIMode": "gdb",
-            "miDebuggerPath": "gdb.exe",
+            "miDebuggerPath": "D:/Apps/MSYS2/ucrt64/bin/gdb.exe",
             "preLaunchTask": "g++ build active file",
             "setupCommands": [
                 {
