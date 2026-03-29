@@ -5,6 +5,9 @@
 #include <cstring>
 #include <cmath>
 #include <cstdio>
+#include <limits>
+
+// СТРУКТУРА ПРЕДМЕТА ИГРОВОГО ИНВЕНТАРЯ(с pragma pack)
 
 #pragma pack(push, 1)
 const int MAX_LEN = 100;
@@ -25,6 +28,93 @@ const char* FILENAME = "inventory.bin";
 const char* TMP_FILE = "inventory_tmp.bin";
 const size_t REC_SIZE = sizeof(Inventory);
 
+// ПРОТОТИПЫ ФУНКЦИЙ (Объявления)
+
+auto ReadNumber(const char* prompt);
+static void setColor(int color);
+void ReadLine(char* buffer, int size);
+int GetRecordCount();
+bool ReadRecordAt(int index, Inventory& out);
+bool WriteRecordAt(int index, const Inventory& in);
+void SwapRecords(int idx1, int idx2);
+void PrintItem(const Inventory& item);
+int LinearSearchInFile(const char* name);
+int BinarySearchInFile_ByWeight(double target);
+void UpdateQuantityByName(const char* name, int addQty);
+
+void AddItemToFile();
+void EditItem();
+void DeleteItem();
+void PrintAllFromFile();
+void SortFileByWeight_Bubble();
+void SortFileByQuantity_Selection();
+void SortFileByName_Insertion();
+
+void WriteToTmpFile(const Inventory& item);
+void ClearTmpFile();
+void PrintTmpFile();
+int GetTmpRecordCount();
+void SortTmpFileByCost_Desc();
+
+void SearchByWeightRangeAndCategory();
+void ViewInventoryByCategory();
+void GenerateReport();
+void HelpWithOverload();
+
+
+int main() {
+    SetConsoleCP(1251);
+    SetConsoleOutputCP(1251);
+    
+    while (true) {
+        int choice = Menu();
+        
+        switch (choice) {
+            case 0: AddItemToFile(); break;
+            case 1: PrintAllFromFile(); break;
+            case 2: EditItem(); break;
+            case 3: DeleteItem(); break;
+            case 4: {
+                char name[MAX_LEN];
+                std::cout << "Search by name: ";
+                ReadLine(name, MAX_LEN);
+                int pos = LinearSearchInFile(name);
+                if (pos == -1) std::cout << "Not found.\n";
+                else {
+                    Inventory item{};
+                    ReadRecordAt(pos, item);
+                    PrintItem(item);
+                }
+                system("pause");
+                break;
+            }
+            case 5: {
+                double target = ReadNumber("Search weight: ");
+                int pos = BinarySearchInFile_ByWeight(target);
+                if (pos == -1) std::cout << "Not found.\n";
+                else {
+                    Inventory item{};
+                    ReadRecordAt(pos, item);
+                    PrintItem(item);
+                }
+                system("pause");
+                break;
+            }
+            case 6: SortFileByWeight_Bubble(); break;
+            case 7: SortFileByQuantity_Selection(); break;
+            case 8: SortFileByName_Insertion(); break;
+            case 9: SearchByWeightRangeAndCategory(); break;
+            case 10: ViewInventoryByCategory(); break;
+            case 11: GenerateReport(); break;
+            case 12: return 0;
+        }
+    }
+}
+
+// ==========================================
+// РЕАЛИЗАЦИЯ ФУНКЦИЙ
+// ==========================================
+
 auto ReadNumber(const char* prompt) {
     double temp;
     while (true) {
@@ -32,16 +122,16 @@ auto ReadNumber(const char* prompt) {
         if (std::cin >> temp) {
             if (temp < 0.0) {
                 std::cout << "Value must be non-negative.\n";
-                std::cin.ignore(999999, '\n');
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
                 continue;
             }
-            std::cin.ignore(999999, '\n');
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return temp;
         }
         else {
             std::cout << "Invalid value. Try again\n";
             std::cin.clear();
-            std::cin.ignore(999999, '\n');
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         }
     }
 }
@@ -50,7 +140,6 @@ static void setColor(int color) {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
 }
 
-// Функция для считывания строки
 void ReadLine(char* buffer, int size) {
     std::cin.getline(buffer, size);
 }
@@ -140,16 +229,12 @@ void UpdateQuantityByName(const char* name, int addQty) {
 }
 
 void AddItemToFile() {
-    if (std::cin.peek() == '\n') std::cin.ignore(1);
-    
     Inventory item{};
     
-    // 1. Ввод имени
     std::cout << "\n\n=== Add New Item ===\n\n";
     std::cout << "Print Item Name: ";
     ReadLine(item.item_name, MAX_LEN);
     
-    // Проверка на дубликат
     if (LinearSearchInFile(item.item_name) != -1) {
         std::cout << "Item '" << item.item_name << "' already exists!\n";
         std::cout << "Add quantity to existing? (y/n): ";
@@ -162,7 +247,6 @@ void AddItemToFile() {
         return;
     }
     
-    // 2. Quest item
     system("cls");
     std::cout << "\n--- Add New Item ---\n";
     std::cout << "Name: " << item.item_name << "\n\n";
@@ -175,14 +259,12 @@ void AddItemToFile() {
         std::cout << "Please enter 'quest' or 'not'\n";
     }
     
-    // 3. Cost
     system("cls");
     std::cout << "\n--- Add New Item ---\n";
     std::cout << "Name: " << item.item_name << "\n";
     std::cout << "Quest: " << (item.quest ? "Yes" : "No") << "\n\n";
     item.cost_per_unit = static_cast<int>(ReadNumber("Cost per unit: "));
     
-    // 4. Category
     system("cls");
     std::cout << "\n--- Add New Item ---\n";
     std::cout << "Name: " << item.item_name << "\n";
@@ -191,7 +273,6 @@ void AddItemToFile() {
     std::cout << "Category: ";
     ReadLine(item.category, MAX_LEN);
     
-    // 5. Weight
     system("cls");
     std::cout << "\n--- Add New Item ---\n";
     std::cout << "Name: " << item.item_name << "\n";
@@ -200,7 +281,6 @@ void AddItemToFile() {
     std::cout << "Category: " << item.category << "\n\n";
     item.weight = ReadNumber("Weight per unit: ");
     
-    // 6. Quantity
     system("cls");
     std::cout << "\n--- Add New Item ---\n";
     std::cout << "Name: " << item.item_name << "\n";
@@ -210,7 +290,6 @@ void AddItemToFile() {
     std::cout << "Weight: " << item.weight << "\n\n";
     item.quantity = static_cast<int>(ReadNumber("Quantity: "));
     
-    // Сохранение
     system("cls");
     std::ofstream file(FILENAME, std::ios::binary | std::ios::app);
     if (file) {
@@ -232,8 +311,6 @@ void AddItemToFile() {
 }
 
 void EditItem() {
-    if (std::cin.peek() == '\n') std::cin.ignore(1);
-    
     char name[MAX_LEN];
     std::cout << "Enter item name to edit: ";
     ReadLine(name, MAX_LEN);
@@ -274,8 +351,6 @@ void EditItem() {
 }
 
 void DeleteItem() {
-    if (std::cin.peek() == '\n') std::cin.ignore(1);
-    
     char name[MAX_LEN];
     std::cout << "Enter item name to DELETE: ";
     ReadLine(name, MAX_LEN);
@@ -449,7 +524,7 @@ void SearchByWeightRangeAndCategory() {
     char category[MAX_LEN];
     std::cout << "Category: ";
     std::cin >> category;
-    std::cin.ignore(999999, '\n');
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     
     int n = GetRecordCount();
     Inventory item{};
@@ -703,57 +778,12 @@ static int Menu() {
             else if (key == 80) choice = (choice + 1) % MENU_SIZE;
         }
         else if (key == 13) {
+            // КЛЮЧЕВОЙ МОМЕНТ: Очищаем буфер ввода ПЕРЕД выходом из меню.
+            // Это удаляет символ '\n', оставшийся после нажатия Enter,
+            // чтобы следующий getline в выбранной функции не считывал пустую строку.
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             system("cls");
             return choice;
-        }
-    }
-}
-
-int main() {
-    SetConsoleCP(1251);
-    SetConsoleOutputCP(1251);
-    
-    while (true) {
-        int choice = Menu();
-        switch (choice) {
-            case 0: AddItemToFile(); break;
-            case 1: PrintAllFromFile(); break;
-            case 2: EditItem(); break;
-            case 3: DeleteItem(); break;
-            case 4: {
-                if (std::cin.peek() == '\n') std::cin.ignore(1);
-                char name[MAX_LEN];
-                std::cout << "Search by name: ";
-                ReadLine(name, MAX_LEN);
-                int pos = LinearSearchInFile(name);
-                if (pos == -1) std::cout << "Not found.\n";
-                else {
-                    Inventory item{};
-                    ReadRecordAt(pos, item);
-                    PrintItem(item);
-                }
-                system("pause");
-                break;
-            }
-            case 5: {
-                double target = ReadNumber("Search weight: ");
-                int pos = BinarySearchInFile_ByWeight(target);
-                if (pos == -1) std::cout << "Not found.\n";
-                else {
-                    Inventory item{};
-                    ReadRecordAt(pos, item);
-                    PrintItem(item);
-                }
-                system("pause");
-                break;
-            }
-            case 6: SortFileByWeight_Bubble(); break;
-            case 7: SortFileByQuantity_Selection(); break;
-            case 8: SortFileByName_Insertion(); break;
-            case 9: SearchByWeightRangeAndCategory(); break;
-            case 10: ViewInventoryByCategory(); break;
-            case 11: GenerateReport(); break;
-            case 12: return 0;
         }
     }
 }
