@@ -50,6 +50,11 @@ static void setColor(int color) {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
 }
 
+// Функция для считывания строки
+void ReadLine(char* buffer, int size) {
+    std::cin.getline(buffer, size);
+}
+
 int GetRecordCount() {
     std::ifstream file(FILENAME, std::ios::binary | std::ios::ate);
     if (!file) return 0;
@@ -139,10 +144,10 @@ void AddItemToFile() {
     
     Inventory item{};
     
-    // 1. Ввод имени (НЕТ system("cls") здесь!)
+    // 1. Ввод имени
     std::cout << "\n\n=== Add New Item ===\n\n";
     std::cout << "Print Item Name: ";
-    std::cin.getline(item.item_name, MAX_LEN);
+    ReadLine(item.item_name, MAX_LEN);
     
     // Проверка на дубликат
     if (LinearSearchInFile(item.item_name) != -1) {
@@ -157,14 +162,14 @@ void AddItemToFile() {
         return;
     }
     
-    // 2. Quest item (здесь КЛЕАРИМ)
+    // 2. Quest item
     system("cls");
     std::cout << "\n--- Add New Item ---\n";
     std::cout << "Name: " << item.item_name << "\n\n";
     char buff[MAX_LEN];
     while (true) {
         std::cout << "Quest item? (quest/not): ";
-        std::cin.getline(buff, MAX_LEN);
+        ReadLine(buff, MAX_LEN);
         if (_stricmp(buff, "quest") == 0) { item.quest = true; break; }
         if (_stricmp(buff, "not") == 0) { item.quest = false; break; }
         std::cout << "Please enter 'quest' or 'not'\n";
@@ -184,7 +189,7 @@ void AddItemToFile() {
     std::cout << "Quest: " << (item.quest ? "Yes" : "No") << "\n";
     std::cout << "Cost: " << item.cost_per_unit << "\n\n";
     std::cout << "Category: ";
-    std::cin.getline(item.category, MAX_LEN);
+    ReadLine(item.category, MAX_LEN);
     
     // 5. Weight
     system("cls");
@@ -231,7 +236,7 @@ void EditItem() {
     
     char name[MAX_LEN];
     std::cout << "Enter item name to edit: ";
-    std::cin.getline(name, MAX_LEN);
+    ReadLine(name, MAX_LEN);
     
     int pos = LinearSearchInFile(name);
     if (pos == -1) {
@@ -259,7 +264,7 @@ void EditItem() {
         case '1': item.cost_per_unit = static_cast<int>(ReadNumber("New cost: ")); modified = true; break;
         case '2': item.weight = ReadNumber("New weight: "); modified = true; break;
         case '3': item.quantity = static_cast<int>(ReadNumber("New quantity: ")); modified = true; break;
-        case '4': std::cout << "New category: "; std::cin.getline(item.category, MAX_LEN); modified = true; break;
+        case '4': std::cout << "New category: "; ReadLine(item.category, MAX_LEN); modified = true; break;
         case '5': item.quest = !item.quest; modified = true; break;
     }
     
@@ -273,7 +278,7 @@ void DeleteItem() {
     
     char name[MAX_LEN];
     std::cout << "Enter item name to DELETE: ";
-    std::cin.getline(name, MAX_LEN);
+    ReadLine(name, MAX_LEN);
     
     int pos = LinearSearchInFile(name);
     if (pos == -1) {
@@ -719,7 +724,7 @@ int main() {
                 if (std::cin.peek() == '\n') std::cin.ignore(1);
                 char name[MAX_LEN];
                 std::cout << "Search by name: ";
-                std::cin.getline(name, MAX_LEN);
+                ReadLine(name, MAX_LEN);
                 int pos = LinearSearchInFile(name);
                 if (pos == -1) std::cout << "Not found.\n";
                 else {
