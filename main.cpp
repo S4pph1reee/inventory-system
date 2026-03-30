@@ -1,105 +1,332 @@
-#ifdef UNICODE
-#undef UNICODE
-#endif
-#ifdef _UNICODE
-#undef _UNICODE
-#endif
-
-#define _CRT_SECURE_NO_WARNINGS
-#include <windows.h>
-#include <commctrl.h>
+#include <iostream>
 #include <fstream>
+#include <windows.h>
+#include <conio.h>
 #include <cstring>
+#include <cmath>
 #include <cstdio>
-#include <string>
-#pragma comment(lib, "comctl32.lib")
-#pragma comment(linker,"\"/manifestdependency:type='win32' \
-name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
-processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
-// ==================== СТРУКТУРА ИНВЕНТАРЯ ====================
+#include <limits>
+#include <iomanip>
+
+// ============================================================================
+// КОНСТАНТЫ И СТРУКТУРЫ
+// ============================================================================
+
+#pragma pack(push, 1)  // Упаковка структуры без выравнивания (для бинарного файла)
+const int MAX_LEN = 100;  // Максимальная длина строковых полей
+
+// ОГРАНИЧЕНИЯ НА ЧИСЛОВЫЕ ЗНАЧЕНИЯ (для отображения в таблице)
+const double MAX_WEIGHT = 999.99;      // 6 символов
+const int MAX_QUANTITY = 9999;         // 4 символа
+const int MAX_COST_PER_UNIT = 99999;   // 5 символов
+const int MAX_TOTAL_COST = 999999;     // 6 символов
+
+// Структура предмета инвентаря
+// pragma pack(1) обеспечивает плотную упаковку без паддинга между полями
 #pragma pack(push, 1)
-const int MAX_LEN = 100;
 struct Inventory {
-    char item_name[MAX_LEN];
-    bool quest;
-    int cost_per_unit;
-    char category[MAX_LEN];
-    double weight;
-    int quantity;
-    
-    int Full_cost() const { return cost_per_unit * quantity; }
+    char item_name[MAX_LEN];    // Название предмета
+    bool quest;                 // Флаг квестового предмета
+    int cost_per_unit;          // Стоимость за единицу
+    char category[MAX_LEN];     // Категория (может быть пустой)
+    double weight;              // Вес за единицу
+    int quantity;               // Количество
+
+    int Full_cost() const { return cost_per_unit * quantity; }  // Общая стоимость
 };
 #pragma pack(pop)
-const char* FILENAME = "inventory.bin";
-const size_t REC_SIZE = sizeof(Inventory);
-// ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
-HWND g_hMainWnd;
-HWND g_hListView;
-HWND g_hStatusBar;
-HINSTANCE g_hInst;
-// ID элементов управления
-#define IDC_LISTVIEW    1001
-#define IDC_BTN_ADD     1002
-#define IDC_BTN_EDIT    1003
-#define IDC_BTN_DELETE  1004
-#define IDC_BTN_SEARCH  1005
-#define IDC_BTN_SORT_WEIGHT 1006
-#define IDC_BTN_SORT_QTY    1007
-#define IDC_BTN_SORT_NAME   1008
-#define IDC_BTN_REPORT  1009
-#define IDC_STATUSBAR   1010
-// ID для диалога добавления/редактирования
-#define IDC_EDIT_NAME     2001
-#define IDC_EDIT_CATEGORY 2002
-#define IDC_EDIT_COST     2003
-#define IDC_EDIT_WEIGHT   2004
-#define IDC_EDIT_QTY      2005
-#define IDC_CHECK_QUEST   2006
-// ==================== ФУНКЦИИ РАБОТЫ С ФАЙЛОМ ====================
+
+const char* FILENAME = "inventory.bin";       // Основной файл данных
+const char* TMP_FILE = "inventory_tmp.bin";   // Временный файл для операций
+const size_t REC_SIZE = sizeof(Inventory);    // Размер одной записи в байтах
+
+// ============================================================================
+// ПРОТОТИПЫ ФУНКЦИЙ
+// ============================================================================
+
+// Устанавливает цвет текста консоли (0-15, см. таблицу цветов Windows Console)
+static void setColor(int color);
+
+// Читает число double с проверкой диапазона [minVal, maxVal]
+double ReadNumberInRange(const char* prompt, double minVal, double maxVal, const char* errorMsg);
+
+// Читает целое число int с проверкой диапазона [minVal, maxVal]
+int ReadIntInRange(const char* prompt, int minVal, int maxVal, const char* errorMsg);
+
+// Читает строку, обязательно требуя непустое значение
+bool ReadRequiredString(const char* prompt, char* buffer, int size);
+
+// Читает строку, разрешая пустое значение (для опциональных полей)
+void ReadOptionalString(const char* prompt, char* buffer, int size);
+
+// Читает строку с консоли через std::cin.getline()
+void ReadLine(char* buffer, int size);
+
+// Проверяет, является ли строка пустой или содержащей только пробелы/табы
+bool IsStringEmpty(const char* str);
+
+// Возвращает количество записей в файле инвентаря
+int GetRecordCount();
+
+// Читает запись по индексу из бинарного файла
+bool ReadRecordAt(int index, Inventory& out);
+
+// Записывает запись по индексу в бинарный файл
+bool WriteRecordAt(int index, const Inventory& in);
+
+// Меняет местами две записи в файле по их индексам
+void SwapRecords(int idx1, int idx2);
+
+// Выводит свойства предмета в виде форматированной таблицы
+void PrintItem(const Inventory& item);
+
+// Выводит все предметы инвентаря в виде таблицы
+void PrintItemTable();
+
+// Выводит таблицу предметов с выделением выбранного элемента цветом
+void PrintItemTableWithSelection(int selectedIndex);
+
+// Линейный поиск предмета по имени (регистронезависимый)
+int LinearSearchInFile(const char* name);
+
+// Линейный поиск по имени, исключая запись с указанным индексом
+// Используется при редактировании имени (чтобы не находить саму себя)
+int LinearSearchExcludingIndex(const char* name, int excludeIndex);
+
+// Бинарный поиск по весу (требует предварительной сортировки по весу)
+int BinarySearchInFile_ByWeight(double target);
+
+// Обновляет количество предмета по имени (добавляет addQty)
+// Используется при попытке добавить существующий предмет
+void UpdateQuantityByName(const char* name, int addQty);
+
+// Добавляет новый предмет в файл
+void AddItemToFile();
+
+// Редактирует существующий предмет через таблицу выбора
+void EditItem();
+
+// Удаляет предмет после подтверждения через таблицу выбора
+void DeleteItem();
+
+// Выводит весь инвентарь в виде таблицы
+// Обёртка над PrintItemTable() с заголовком
+void PrintAllFromFile();
+
+// Сортировка файла по весу методом пузырька (по возрастанию)
+void SortFileByWeight_Bubble();
+
+// Сортировка файла по количеству методом выбора (по возрастанию)
+void SortFileByQuantity_Selection();
+
+// Сортировка файла по имени методом вставки (алфавитный порядок)
+void SortFileByName_Insertion();
+
+// Записывает предмет во временный файл (режим append)
+// Используется для поиска и фильтрации
+void WriteToTmpFile(const Inventory& item);
+
+// Очищает временный файл (режим trunc)
+void ClearTmpFile();
+
+// Выводит все предметы из временного файла (детальный вид)
+void PrintTmpFile();
+
+// Выводит все предметы из временного файла в виде таблицы
+void PrintTmpFileTable();
+
+// Возвращает количество записей во временном файле
+int GetTmpRecordCount();
+
+// Сортирует временный файл по стоимости за единицу (по убыванию)
+void SortTmpFileByCost_Desc();
+
+// Меню выбора фильтра категории для поиска
+int SelectCategoryForSearch(char* category, int size);
+
+// Поиск по диапазону веса и категории с фильтрацией
+// Результаты сохраняются во временный файл и сортируются
+void SearchByWeightRangeAndCategory();
+
+// Просмотр инвентаря с группировкой по категориям
+// Включает анализ: самый дорогой и самый тяжёлый набор
+void ViewInventoryByCategory();
+
+// Генерирует текстовый отчёт в файл inventory_report.txt
+void GenerateReport();
+
+// Находит наименее выгодный предмет по соотношению цена/вес(Исключает квестовые предметы)
+void HelpWithOverload();
+
+// Главное меню программы с навигацией стрелками
+int MainMenu();
+
+// Универсальное подменю (используется для Edit, Delete, Category)
+// title - заголовок, options - массив пунктов, optionCount - количество
+int SubMenu(const char* title, const char** options, int optionCount);
+
+// Выбор предмета из таблицы с навигацией стрелками
+int SelectItemFromTable(const char* title);
+
+// ============================================================================
+// MAIN
+// ============================================================================
+
+int main() {
+    SetConsoleCP(1251);
+    SetConsoleOutputCP(1251);
+
+    while (true) {
+        int choice = MainMenu();
+
+        switch (choice) {
+            case 0: AddItemToFile(); break;
+            case 1: PrintAllFromFile(); break;
+            case 2: EditItem(); break;
+            case 3: DeleteItem(); break;
+            case 4: {
+                char name[MAX_LEN];
+                ReadRequiredString("Search by name: ", name, MAX_LEN);
+                int pos = LinearSearchInFile(name);
+                if (pos == -1) std::cout << "Not found.\n";
+                else {
+                    Inventory item{};
+                    ReadRecordAt(pos, item);
+                    PrintItem(item);
+                }
+                system("pause");
+                break;
+            }
+            case 5: {
+                double target = ReadNumberInRange("Search weight: ", 0.01, MAX_WEIGHT, 
+                    "Weight out of range.\n");
+                int pos = BinarySearchInFile_ByWeight(target);
+                if (pos == -1) std::cout << "Not found.\n";
+                else {
+                    Inventory item{};
+                    ReadRecordAt(pos, item);
+                    PrintItem(item);
+                }
+                system("pause");
+                break;
+            }
+            case 6: SortFileByWeight_Bubble(); break;
+            case 7: SortFileByQuantity_Selection(); break;
+            case 8: SortFileByName_Insertion(); break;
+            case 9: SearchByWeightRangeAndCategory(); break;
+            case 10: ViewInventoryByCategory(); break;
+            case 11: GenerateReport(); break;
+            case 12: HelpWithOverload(); break;
+            case 13: return 0;
+        }
+    }
+}
+
+// ============================================================================
+// РЕАЛИЗАЦИЯ ФУНКЦИЙ
+// ============================================================================
+
+static void setColor(int color) {
+    // Получаем handle стандартного вывода и устанавливаем атрибут цвета
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
+}
+
+double ReadNumberInRange(const char* prompt, double minVal, double maxVal, const char* errorMsg) {
+    double temp;
+    while (true) {
+        std::cout << prompt;
+        if (std::cin >> temp) {
+            if (temp < minVal || temp > maxVal) {
+                std::cout << errorMsg;
+                std::cout << "Allowed range: " << minVal << " to " << maxVal << "\n";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                continue;
+            }
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return temp;
+        }
+        else {
+            std::cout << "Invalid value. Try again\n";
+            std::cin.clear();  // Сброс флага ошибки
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+    }
+}
+
+int ReadIntInRange(const char* prompt, int minVal, int maxVal, const char* errorMsg) {
+    int temp;
+    while (true) {
+        std::cout << prompt;
+        if (std::cin >> temp) {
+            if (temp < minVal || temp > maxVal) {
+                std::cout << errorMsg;
+                std::cout << "Allowed range: " << minVal << " to " << maxVal << "\n";
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                continue;
+            }
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return temp;
+        }
+        else {
+            std::cout << "Invalid value. Try again\n";
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+    }
+}
+
+bool ReadRequiredString(const char* prompt, char* buffer, int size) {
+    while (true) {
+        std::cout << prompt;
+        ReadLine(buffer, size);
+        if (!IsStringEmpty(buffer)) {
+            return true;
+        }
+        std::cout << "This field cannot be empty. Please try again.\n";
+    }
+}
+
+void ReadOptionalString(const char* prompt, char* buffer, int size) {
+    std::cout << prompt;
+    ReadLine(buffer, size);
+}
+
+void ReadLine(char* buffer, int size) {
+    std::cin.getline(buffer, size);
+}
+
+bool IsStringEmpty(const char* str) {
+    if (str == nullptr) return true;
+    // Проверяем каждый символ: если есть непробельный - строка не пустая
+    for (int i = 0; str[i] != '\0'; ++i) {
+        if (str[i] != ' ' && str[i] != '\t') return false;
+    }
+    return true;
+}
+
 int GetRecordCount() {
+    // ios::ate - открыть и сразу перейти в конец для получения размера
     std::ifstream file(FILENAME, std::ios::binary | std::ios::ate);
     if (!file) return 0;
     return static_cast<int>(file.tellg() / REC_SIZE);
 }
+
 bool ReadRecordAt(int index, Inventory& out) {
     std::ifstream file(FILENAME, std::ios::binary);
     if (!file) return false;
+    // Позиционируемся на нужную запись: индекс * размер записи
     file.seekg(index * REC_SIZE);
     return file.read(reinterpret_cast<char*>(&out), REC_SIZE).good();
 }
+
 bool WriteRecordAt(int index, const Inventory& in) {
+    // ios::in | ios::out - открытие для чтения и записи одновременно
     std::fstream file(FILENAME, std::ios::binary | std::ios::in | std::ios::out);
     if (!file) return false;
     file.seekp(index * REC_SIZE);
     return file.write(reinterpret_cast<const char*>(&in), REC_SIZE).good();
 }
-void AddRecord(const Inventory& item) {
-    std::ofstream file(FILENAME, std::ios::binary | std::ios::app);
-    if (file) {
-        file.write(reinterpret_cast<const char*>(&item), REC_SIZE);
-    }
-}
-void DeleteRecordAt(int index) {
-    int n = GetRecordCount();
-    if (index < 0 || index >= n) return;
-    
-    const char* TMP_FILE = "inventory_tmp.bin";
-    std::ifstream src(FILENAME, std::ios::binary);
-    std::ofstream tmp(TMP_FILE, std::ios::binary);
-    
-    Inventory temp{};
-    int i = 0;
-    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
-        if (i != index)
-            tmp.write(reinterpret_cast<char*>(&temp), REC_SIZE);
-        ++i;
-    }
-    src.close();
-    tmp.close();
-    
-    remove(FILENAME);
-    rename(TMP_FILE, FILENAME);
-}
+
 void SwapRecords(int idx1, int idx2) {
     if (idx1 == idx2) return;
     Inventory a{}, b{};
@@ -108,7 +335,320 @@ void SwapRecords(int idx1, int idx2) {
     WriteRecordAt(idx1, b);
     WriteRecordAt(idx2, a);
 }
-int LinearSearchByName(const char* name) {
+
+void PrintItem(const Inventory& item) {
+    std::cout << "\n";
+    std::cout << "+------------------------------------------+\n";
+    std::cout << "|  INVENTORY ITEM DETAILS                  |\n";
+    std::cout << "+------------------------------------------+\n";
+    
+    // Ограничиваем длину имени 24 символами для предотвращения переполнения
+    char nameDisplay[25];
+    strncpy_s(nameDisplay, item.item_name, 24);
+    nameDisplay[24] = '\0';
+    std::cout << "|  Name:     " << std::left << std::setw(29) << nameDisplay << "|\n";
+    
+    std::cout << "|  Quest:    " << std::left << std::setw(29) << (item.quest ? "Yes" : "No") << "|\n";
+    
+    // Форматируем стоимость с единицей измерения в одну строку
+    char costStr[12];
+    snprintf(costStr, sizeof(costStr), "%d gold", item.cost_per_unit);
+    std::cout << "|  Cost:     " << std::left << std::setw(29) << costStr << "|\n";
+    
+    char catDisplay[11];
+    if (IsStringEmpty(item.category)) {
+        strcpy_s(catDisplay, "(none)");
+    }
+    else {
+        strncpy_s(catDisplay, item.category, 10);
+        catDisplay[10] = '\0';
+    }
+    std::cout << "|  Category: " << std::left << std::setw(29) << catDisplay << "|\n";
+    
+    // Форматируем вес с 2 знаками после запятой и единицей измерения
+    char weightStr[10];
+    snprintf(weightStr, sizeof(weightStr), "%.2f kg", item.weight);
+    std::cout << "|  Weight:   " << std::left << std::setw(29) << weightStr << "|\n";
+    
+    std::cout << "|  Quantity: " << std::left << std::setw(29) << item.quantity << "|\n";
+    
+    char totalStr[12];
+    snprintf(totalStr, sizeof(totalStr), "%d gold", item.Full_cost());
+    std::cout << "|  Total:    " << std::left << std::setw(29) << totalStr << "|\n";
+    
+    std::cout << "+------------------------------------------+\n\n";
+}
+
+void PrintItemTable() {
+    int n = GetRecordCount();
+    if (n == 0) {
+        std::cout << "Inventory is empty.\n";
+        return;
+    }
+
+    std::cout << "\n";
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+    std::cout << "| #  | Name                       | Category   | Quest    | Weight | Qty  | Total  |\n";
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+
+    Inventory item{};
+    for (int i = 0; i < n; ++i) {
+        if (ReadRecordAt(i, item)) {
+            char nameDisplay[25];
+            char catDisplay[11];
+            strncpy_s(nameDisplay, item.item_name, 24);
+            nameDisplay[24] = '\0';
+            
+            if (IsStringEmpty(item.category)) {
+                strcpy_s(catDisplay, "(none)");
+            }
+            else {
+                strncpy_s(catDisplay, item.category, 10);
+                catDisplay[10] = '\0';
+            }
+
+            char weightStr[8];
+            snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
+
+            std::cout << "| " << std::setw(2) << i << " | " 
+                      << std::left << std::setw(26) << nameDisplay << " | "
+                      << std::left << std::setw(10) << catDisplay << " | "
+                      << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
+                      << std::setw(6) << weightStr << " | "
+                      << std::setw(4) << item.quantity << " | "
+                      << std::setw(6) << item.Full_cost() << " |\n";
+        }
+    }
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+    std::cout << "Total items: " << n << "\n\n";
+}
+
+void PrintItemTableWithSelection(int selectedIndex) {
+    int n = GetRecordCount();
+    if (n == 0) {
+        std::cout << "Inventory is empty.\n";
+        return;
+    }
+
+    std::cout << "\n";
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+    std::cout << "| #  | Name                       | Category   | Quest    | Weight | Qty  | Total  |\n";
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+
+    Inventory item{};
+    for (int i = 0; i < n; ++i) {
+        if (ReadRecordAt(i, item)) {
+            char nameDisplay[25];
+            char catDisplay[11];
+            strncpy_s(nameDisplay, item.item_name, 24);
+            nameDisplay[24] = '\0';
+            
+            if (IsStringEmpty(item.category)) {
+                strcpy_s(catDisplay, "(none)");
+            }
+            else {
+                strncpy_s(catDisplay, item.category, 10);
+                catDisplay[10] = '\0';
+            }
+
+            char weightStr[8];
+            snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
+
+            // Подсветка выбранного элемента жёлтым цветом (цвет 14)
+            if (i == selectedIndex) {
+                setColor(14);
+                std::cout << "| " << std::setw(2) << i << " | " 
+                          << std::left << std::setw(26) << nameDisplay << " | "
+                          << std::left << std::setw(10) << catDisplay << " | "
+                          << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
+                          << std::setw(6) << weightStr << " | "
+                          << std::setw(4) << item.quantity << " | "
+                          << std::setw(6) << item.Full_cost() << " |\n";
+                setColor(7);  // Возврат к белому цвету
+            }
+            else {
+                std::cout << "| " << std::setw(2) << i << " | " 
+                          << std::left << std::setw(26) << nameDisplay << " | "
+                          << std::left << std::setw(10) << catDisplay << " | "
+                          << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
+                          << std::setw(6) << weightStr << " | "
+                          << std::setw(4) << item.quantity << " | "
+                          << std::setw(6) << item.Full_cost() << " |\n";
+            }
+        }
+    }
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+    std::cout << "Total items: " << n << " | Use UP/DOWN arrows to select, ENTER to confirm\n\n";
+}
+
+int SelectItemFromTable(const char* title) {
+    int n = GetRecordCount();
+    if (n == 0) return -1;
+
+    int selectedIndex = 0;
+    while (true) {
+        system("cls");
+        std::cout << "=== " << title << " ===\n";
+        std::cout << "Records in file: " << n << "\n";
+        PrintItemTableWithSelection(selectedIndex);
+
+        int key = _getch();  // Чтение клавиши без эхо
+        if (key == 224 || key == 0) {
+            // Специальные клавиши (стрелки) передаются как два байта
+            key = _getch();
+            if (key == 72) {  // Up arrow
+                selectedIndex = (selectedIndex - 1 + n) % n;  // Циклический переход
+            }
+            else if (key == 80) {  // Down arrow
+                selectedIndex = (selectedIndex + 1) % n;
+            }
+        }
+        else if (key == 13) {  // Enter
+            system("cls");
+            return selectedIndex;
+        }
+        else if (key == 27) {  // Escape
+            system("cls");
+            return -1;
+        }
+    }
+}
+
+int SubMenu(const char* title, const char** options, int optionCount) {
+    int choice = 0;
+    while (true) {
+        system("cls");
+        std::cout << "=== " << title << " ===\n";
+        std::cout << "Records in file: " << GetRecordCount() << "\n\n";
+
+        for (int i = 0; i < optionCount; i++) {
+            if (i == choice) {
+                setColor(14);  // Жёлтый для выбранного пункта
+                std::cout << " > " << options[i] << "\n";
+                setColor(7);   // Белый для остальных
+            }
+            else {
+                std::cout << "   " << options[i] << "\n";
+            }
+        }
+
+        int key = _getch();
+        if (key == 224 || key == 0) {
+            key = _getch();
+            if (key == 72) choice = (choice - 1 + optionCount) % optionCount;
+            else if (key == 80) choice = (choice + 1) % optionCount;
+        }
+        else if (key == 13) {
+            system("cls");
+            return choice;
+        }
+    }
+}
+
+int MainMenu() {
+    const int MENU_SIZE = 14;
+    const char* menu[MENU_SIZE] = {
+        "Add Item",
+        "View All Items",
+        "Edit Item",
+        "Delete Item",
+        "Search by Name (linear)",
+        "Search by Weight (binary)",
+        "Sort by Weight (bubble)",
+        "Sort by Quantity (selection)",
+        "Sort by Name (insertion)",
+        "Search: Weight Range + Category",
+        "View by Category + Analysis",
+        "Generate Text Report",
+        "Help With Overload",
+        "Exit"
+    };
+
+    int choice = 0;
+    while (true) {
+        system("cls");
+        std::cout << "=== INVENTORY MANAGER ===\n";
+        std::cout << "Records in file: " << GetRecordCount() << "\n\n";
+
+        for (int i = 0; i < MENU_SIZE; i++) {
+            if (i == choice) {
+                setColor(14);
+                std::cout << " > " << menu[i] << "\n";
+                setColor(7);
+            }
+            else {
+                std::cout << "   " << menu[i] << "\n";
+            }
+        }
+
+        int key = _getch();
+        if (key == 224 || key == 0) {
+            key = _getch();
+            if (key == 72) choice = (choice - 1 + MENU_SIZE) % MENU_SIZE;
+            else if (key == 80) choice = (choice + 1) % MENU_SIZE;
+        }
+        else if (key == 13) {
+            system("cls");
+            return choice;
+        }
+    }
+}
+
+int SelectCategoryForSearch(char* category, int size) {
+    const int CAT_MENU_SIZE = 3;
+    const char* catMenu[CAT_MENU_SIZE] = {
+        "Search items WITH category",
+        "Search items WITHOUT category (empty)",
+        "Search ALL items (no filter)"
+    };
+
+    int choice = 0;
+    while (true) {
+        system("cls");
+        std::cout << "=== CATEGORY FILTER ===\n\n";
+
+        for (int i = 0; i < CAT_MENU_SIZE; i++) {
+            if (i == choice) {
+                setColor(14);
+                std::cout << " > " << catMenu[i] << "\n";
+                setColor(7);
+            }
+            else {
+                std::cout << "   " << catMenu[i] << "\n";
+            }
+        }
+
+        int key = _getch();
+        if (key == 224 || key == 0) {
+            key = _getch();
+            if (key == 72) choice = (choice - 1 + CAT_MENU_SIZE) % CAT_MENU_SIZE;
+            else if (key == 80) choice = (choice + 1) % CAT_MENU_SIZE;
+        }
+        else if (key == 13) {
+            system("cls");
+            
+            if (choice == 0) {
+                std::cout << "Enter category name: ";
+                ReadLine(category, size);
+                if (IsStringEmpty(category)) {
+                    memset(category, 0, size);
+                    return 0;  // Пустая категория
+                }
+                return 1;  // Конкретная категория
+            }
+            else if (choice == 1) {
+                memset(category, 0, size);
+                return 0;  // Поиск без категории
+            }
+            else {
+                memset(category, 0, size);
+                return 2;  // Без фильтра
+            }
+        }
+    }
+}
+
+int LinearSearchInFile(const char* name) {
     int n = GetRecordCount();
     Inventory temp{};
     for (int i = 0; i < n; ++i) {
@@ -117,11 +657,329 @@ int LinearSearchByName(const char* name) {
     }
     return -1;
 }
-// ==================== СОРТИРОВКИ ====================
-void SortByWeight() {
+
+int LinearSearchExcludingIndex(const char* name, int excludeIndex) {
     int n = GetRecordCount();
-    if (n <= 1) return;
+    Inventory temp{};
+    for (int i = 0; i < n; ++i) {
+        if (i == excludeIndex) continue;  // Пропускаем текущую запись
+        if (ReadRecordAt(i, temp) && _stricmp(temp.item_name, name) == 0)
+            return i;
+    }
+    return -1;
+}
+
+int BinarySearchInFile_ByWeight(double target) {
+    int n = GetRecordCount();
+    if (n == 0) return -1;
+
+    int left = 0, right = n - 1;
+    Inventory temp{};
+
+    while (left <= right) {
+        int mid = (left + right) / 2;
+        if (!ReadRecordAt(mid, temp)) break;
+
+        // Сравнение с допуском для floating-point
+        if (std::abs(temp.weight - target) < 0.001)
+            return mid;
+        else if (temp.weight < target)
+            left = mid + 1;
+        else
+            right = mid - 1;
+    }
+    return -1;
+}
+
+void UpdateQuantityByName(const char* name, int addQty) {
+    int pos = LinearSearchInFile(name);
+    if (pos == -1) return;
+
+    Inventory item{};
+    if (ReadRecordAt(pos, item)) {
+        // Проверка на превышение максимального количества
+        if (item.quantity + addQty > MAX_QUANTITY) {
+            std::cout << "Cannot add: quantity would exceed maximum (" << MAX_QUANTITY << ")\n";
+            return;
+        }
+        item.quantity += addQty;
+        WriteRecordAt(pos, item);
+        std::cout << "Updated quantity: +" << addQty << "\n";
+    }
+}
+
+void AddItemToFile() {
+    Inventory item{};
+    memset(item.item_name, 0, MAX_LEN);
+    memset(item.category, 0, MAX_LEN);
+
+    std::cout << "\n=== ADD NEW ITEM ===\n\n";
+    std::cout << "Max values: Weight=" << MAX_WEIGHT << ", Cost=" << MAX_COST_PER_UNIT 
+              << ", Qty=" << MAX_QUANTITY << "\n\n";
+
+    while (true) {
+        ReadRequiredString("Enter Item Name: ", item.item_name, MAX_LEN);
+        if (LinearSearchInFile(item.item_name) != -1) {
+            std::cout << "Item '" << item.item_name << "' already exists!\n";
+            std::cout << "Add quantity to existing? (y/n): ";
+            
+            // Очистка буфера клавиатуры перед _getch()
+            while (_kbhit()) _getch();
+            
+            if (_getch() == 'y') {
+                int addQty = ReadIntInRange("Quantity to add: ", 1, MAX_QUANTITY, 
+                    "Invalid quantity.\n");
+                UpdateQuantityByName(item.item_name, addQty);
+            }
+            system("pause");
+            system("cls");
+            return;
+        }
+        break;
+    }
+
+    system("cls");
+    std::cout << "\n=== ADD NEW ITEM ===\n";
+    std::cout << "Name: " << item.item_name << "\n\n";
+
+    char buff[MAX_LEN];
+    while (true) {
+        std::cout << "Quest item? (quest/not): ";
+        ReadLine(buff, MAX_LEN);
+        if (_stricmp(buff, "quest") == 0) { item.quest = true; break; }
+        if (_stricmp(buff, "not") == 0) { item.quest = false; break; }
+        std::cout << "Please enter 'quest' or 'not'\n";
+    }
+
+    system("cls");
+    std::cout << "\n=== ADD NEW ITEM ===\n";
+    std::cout << "Name: " << item.item_name << "\n";
+    std::cout << "Quest: " << (item.quest ? "Yes" : "No") << "\n\n";
+
+    item.cost_per_unit = ReadIntInRange("Cost per unit: ", 1, MAX_COST_PER_UNIT, 
+        "Invalid cost.\n");
+
+    system("cls");
+    std::cout << "\n=== ADD NEW ITEM ===\n";
+    std::cout << "Name: " << item.item_name << "\n";
+    std::cout << "Quest: " << (item.quest ? "Yes" : "No") << "\n";
+    std::cout << "Cost: " << item.cost_per_unit << "\n\n";
+
+    std::cout << "Category (press Enter to skip): ";
+    ReadOptionalString("", item.category, MAX_LEN);
+
+    system("cls");
+    std::cout << "\n=== ADD NEW ITEM ===\n";
+    std::cout << "Name: " << item.item_name << "\n";
+    std::cout << "Quest: " << (item.quest ? "Yes" : "No") << "\n";
+    std::cout << "Cost: " << item.cost_per_unit << "\n";
+    std::cout << "Category: " << (IsStringEmpty(item.category) ? "(none)" : item.category) << "\n\n";
+
+    item.weight = ReadNumberInRange("Weight per unit: ", 0.01, MAX_WEIGHT, 
+        "Invalid weight.\n");
+
+    system("cls");
+    std::cout << "\n=== ADD NEW ITEM ===\n";
+    std::cout << "Name: " << item.item_name << "\n";
+    std::cout << "Quest: " << (item.quest ? "Yes" : "No") << "\n";
+    std::cout << "Cost: " << item.cost_per_unit << "\n";
+    std::cout << "Category: " << (IsStringEmpty(item.category) ? "(none)" : item.category) << "\n";
+    std::cout << "Weight: " << std::fixed << std::setprecision(2) << item.weight << "\n\n";
+
+    // Вычисление максимального количества с учётом ограничения общей стоимости
+    int maxQty = MAX_QUANTITY;
+    if (item.cost_per_unit > 0) {
+        int maxQtyByCost = MAX_TOTAL_COST / item.cost_per_unit;
+        if (maxQtyByCost < maxQty) maxQty = maxQtyByCost;
+    }
+
+    item.quantity = ReadIntInRange("Quantity: ", 1, maxQty, 
+        "Invalid quantity.\n");
+
+    system("cls");
+    std::ofstream file(FILENAME, std::ios::binary | std::ios::app);
+    if (file) {
+        file.write(reinterpret_cast<char*>(&item), REC_SIZE);
+        std::cout << "\n=== ITEM ADDED SUCCESSFULLY ===\n\n";
+        PrintItem(item);
+    }
+    else {
+        std::cout << "Error writing to file!\n";
+    }
+    system("pause");
+    system("cls");
+}
+
+void EditItem() {
+    int n = GetRecordCount();
+    if (n == 0) {
+        std::cout << "Inventory is empty. Nothing to edit.\n";
+        system("pause");
+        return;
+    }
+
+    int pos = SelectItemFromTable("SELECT ITEM TO EDIT");
+    if (pos == -1) {
+        std::cout << "Edit cancelled.\n";
+        system("pause");
+        return;
+    }
+
+    Inventory item{};
+    ReadRecordAt(pos, item);
+
+    const int EDIT_MENU_SIZE = 7;
+    const char* editMenu[EDIT_MENU_SIZE] = {
+        "Change Name",
+        "Change Cost",
+        "Change Weight",
+        "Change Quantity",
+        "Change Category",
+        "Toggle Quest Flag",
+        "Cancel"
+    };
+
+    int choice = SubMenu("EDIT ITEM", editMenu, EDIT_MENU_SIZE);
+
+    bool modified = false;
+    bool nameChanged = false;
+    char newName[MAX_LEN];
+
+    switch (choice) {
+        case 0:
+            while (true) {
+                ReadRequiredString("New name: ", newName, MAX_LEN);
+                if (LinearSearchExcludingIndex(newName, pos) != -1) {
+                    std::cout << "Item with name '" << newName << "' already exists!\n";
+                    continue;
+                }
+                strcpy_s(item.item_name, newName);
+                nameChanged = true;
+                modified = true;
+                break;
+            }
+            break;
+        case 1:
+            item.cost_per_unit = ReadIntInRange("New cost: ", 1, MAX_COST_PER_UNIT, 
+                "Invalid cost.\n");
+            modified = true;
+            break;
+        case 2:
+            item.weight = ReadNumberInRange("New weight: ", 0.01, MAX_WEIGHT, 
+                "Invalid weight.\n");
+            modified = true;
+            break;
+        case 3: {
+            int maxQty = MAX_QUANTITY;
+            if (item.cost_per_unit > 0) {
+                int maxQtyByCost = MAX_TOTAL_COST / item.cost_per_unit;
+                if (maxQtyByCost < maxQty) maxQty = maxQtyByCost;
+            }
+            item.quantity = ReadIntInRange("New quantity: ", 1, maxQty, 
+                "Invalid quantity.\n");
+            modified = true;
+            break;
+        }
+        case 4:
+            std::cout << "New category (press Enter to clear): ";
+            ReadOptionalString("", item.category, MAX_LEN);
+            modified = true;
+            break;
+        case 5:
+            item.quest = !item.quest;
+            modified = true;
+            break;
+        case 6:
+            std::cout << "Cancelled.\n";
+            system("pause");
+            return;
+    }
+
+    if (modified) {
+        WriteRecordAt(pos, item);
+        std::cout << "Saved!\n";
+        if (nameChanged) {
+            std::cout << "Note: Item name was changed. Sort order may have changed.\n";
+        }
+    }
+    system("pause");
+}
+
+void DeleteItem() {
+    int n = GetRecordCount();
+    if (n == 0) {
+        std::cout << "Inventory is empty. Nothing to delete.\n";
+        system("pause");
+        return;
+    }
+
+    int pos = SelectItemFromTable("SELECT ITEM TO DELETE");
+    if (pos == -1) {
+        std::cout << "Delete cancelled.\n";
+        system("pause");
+        return;
+    }
+
+    Inventory item{};
+    ReadRecordAt(pos, item);
+
+    std::cout << "\n=== CONFIRM DELETE ===\n";
+    PrintItem(item);
+    std::cout << "Are you sure you want to delete this item? (y/n): ";
     
+    // ОЧИСТКА БУФЕРА КЛАВИАТУРЫ (не std::cin)
+    // _kbhit() проверяет наличие символов в буфере консоли
+    // _getch() читает и удаляет символ из буфера
+    while (_kbhit()) _getch();  // Очищаем все ожидающие символы
+    
+    char confirm = _getch();
+    std::cout << confirm << "\n\n";
+    
+    if (confirm != 'y' && confirm != 'Y') {
+        std::cout << "Delete cancelled.\n";
+        system("pause");
+        return;
+    }
+
+    // Копирование всех записей кроме удаляемой во временный файл
+    std::ifstream src(FILENAME, std::ios::binary);
+    std::ofstream tmp(TMP_FILE, std::ios::binary);
+
+    Inventory temp{};
+    int index = 0;
+    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
+        if (index != pos)
+            tmp.write(reinterpret_cast<char*>(&temp), REC_SIZE);
+        ++index;
+    }
+    src.close(); tmp.close();
+
+    // Замена основного файла временным
+    remove(FILENAME);
+    rename(TMP_FILE, FILENAME);
+
+    std::cout << "Item deleted!\n";
+    system("pause");
+}
+
+void PrintAllFromFile() {
+    int n = GetRecordCount();
+    if (n == 0) {
+        std::cout << "Inventory is empty.\n";
+        system("pause");
+        return;
+    }
+
+    std::cout << "\n=== INVENTORY ===\n";
+    PrintItemTable();
+    system("pause");
+}
+
+void SortFileByWeight_Bubble() {
+    int n = GetRecordCount();
+    if (n <= 1) { std::cout << "Nothing to sort.\n"; system("pause"); return; }
+
+    // Пузырьковая сортировка: O(n²)
     for (int i = 0; i < n - 1; ++i) {
         for (int j = 0; j < n - i - 1; ++j) {
             Inventory a{}, b{};
@@ -132,16 +990,21 @@ void SortByWeight() {
             }
         }
     }
+    std::cout << "Sorted by weight (bubble)!\n";
+    PrintItemTable();
+    system("pause");
 }
-void SortByQuantity() {
+
+void SortFileByQuantity_Selection() {
     int n = GetRecordCount();
-    if (n <= 1) return;
-    
+    if (n <= 1) { std::cout << "Nothing to sort.\n"; system("pause"); return; }
+
+    // Сортировка выбором: O(n²)
     for (int i = 0; i < n - 1; ++i) {
         int min_idx = i;
         Inventory min_item{};
         ReadRecordAt(i, min_item);
-        
+
         for (int j = i + 1; j < n; ++j) {
             Inventory curr{};
             ReadRecordAt(j, curr);
@@ -152,16 +1015,21 @@ void SortByQuantity() {
         }
         if (min_idx != i) SwapRecords(i, min_idx);
     }
+    std::cout << "Sorted by quantity (selection)!\n";
+    PrintItemTable();
+    system("pause");
 }
-void SortByName() {
+
+void SortFileByName_Insertion() {
     int n = GetRecordCount();
-    if (n <= 1) return;
-    
+    if (n <= 1) { std::cout << "Nothing to sort.\n"; system("pause"); return; }
+
+    // Сортировка вставками: O(n²)
     for (int i = 1; i < n; ++i) {
         Inventory key{};
         ReadRecordAt(i, key);
         int j = i - 1;
-        
+
         while (j >= 0) {
             Inventory curr{};
             ReadRecordAt(j, curr);
@@ -173,689 +1041,364 @@ void SortByName() {
         }
         WriteRecordAt(j + 1, key);
     }
+    std::cout << "Sorted by name (insertion)!\n";
+    PrintItemTable();
+    system("pause");
 }
-// ==================== ГЕНЕРАЦИЯ ОТЧЁТА ====================
+
+void WriteToTmpFile(const Inventory& item) {
+    std::ofstream tmp(TMP_FILE, std::ios::binary | std::ios::app);
+    if (tmp) tmp.write(reinterpret_cast<const char*>(&item), REC_SIZE);
+}
+
+void ClearTmpFile() {
+    std::ofstream tmp(TMP_FILE, std::ios::binary | std::ios::trunc);
+}
+
+void PrintTmpFile() {
+    std::ifstream tmp(TMP_FILE, std::ios::binary);
+    if (!tmp) return;
+    Inventory item{};
+    while (tmp.read(reinterpret_cast<char*>(&item), REC_SIZE))
+        PrintItem(item);
+    tmp.close();
+}
+
+void PrintTmpFileTable() {
+    std::ifstream tmp(TMP_FILE, std::ios::binary);
+    if (!tmp) return;
+
+    std::cout << "\n";
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+    std::cout << "| #  | Name                       | Category   | Quest    | Weight | Qty  | Total  |\n";
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+
+    Inventory item{};
+    int i = 0;
+    while (tmp.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
+        char nameDisplay[25];
+        char catDisplay[11];
+        strncpy_s(nameDisplay, item.item_name, 24);
+        nameDisplay[24] = '\0';
+        
+        if (IsStringEmpty(item.category)) {
+            strcpy_s(catDisplay, "(none)");
+        }
+        else {
+            strncpy_s(catDisplay, item.category, 10);
+            catDisplay[10] = '\0';
+        }
+
+        char weightStr[8];
+        snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
+
+        std::cout << "| " << std::setw(2) << i << " | " 
+                  << std::left << std::setw(26) << nameDisplay << " | "
+                  << std::left << std::setw(10) << catDisplay << " | "
+                  << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
+                  << std::setw(6) << weightStr << " | "
+                  << std::setw(4) << item.quantity << " | "
+                  << std::setw(6) << item.Full_cost() << " |\n";
+        i++;
+    }
+    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+    std::cout << "Total items: " << i << "\n\n";
+    
+    tmp.close();
+}
+
+int GetTmpRecordCount() {
+    std::ifstream tmp(TMP_FILE, std::ios::binary | std::ios::ate);
+    if (!tmp) return 0;
+    return static_cast<int>(tmp.tellg() / REC_SIZE);
+}
+
+void SortTmpFileByCost_Desc() {
+    int n = GetTmpRecordCount();
+    if (n <= 1) return;
+
+    // Пузырьковая сортировка по убыванию стоимости
+    for (int i = 0; i < n - 1; ++i) {
+        for (int j = 0; j < n - i - 1; ++j) {
+            Inventory a{}, b{};
+            std::ifstream tmp(TMP_FILE, std::ios::binary);
+            tmp.seekg(j * REC_SIZE);
+            tmp.read(reinterpret_cast<char*>(&a), REC_SIZE);
+            tmp.read(reinterpret_cast<char*>(&b), REC_SIZE);
+            tmp.close();
+
+            if (a.cost_per_unit < b.cost_per_unit) {
+                std::fstream tmp(TMP_FILE, std::ios::binary | std::ios::in | std::ios::out);
+                tmp.seekp(j * REC_SIZE);
+                tmp.write(reinterpret_cast<char*>(&b), REC_SIZE);
+                tmp.write(reinterpret_cast<char*>(&a), REC_SIZE);
+                tmp.close();
+            }
+        }
+    }
+}
+
+void SearchByWeightRangeAndCategory() {
+    ClearTmpFile();
+
+    double low = ReadNumberInRange("Lower weight bound: ", 0.01, MAX_WEIGHT, 
+        "Invalid weight.\n");
+    double high = ReadNumberInRange("Upper weight bound: ", 0.01, MAX_WEIGHT, 
+        "Invalid weight.\n");
+    if (low > high) std::swap(low, high);
+
+    char category[MAX_LEN];
+    int filterType = SelectCategoryForSearch(category, MAX_LEN);
+
+    int n = GetRecordCount();
+    Inventory item{};
+    int matches = 0;
+
+    for (int i = 0; i < n; ++i) {
+        if (ReadRecordAt(i, item)) {
+            bool categoryMatch = false;
+
+            if (filterType == 2) {
+                categoryMatch = true;  // Без фильтра
+            }
+            else if (filterType == 0) {
+                categoryMatch = IsStringEmpty(item.category);  // Только без категории
+            }
+            else {
+                categoryMatch = (_stricmp(item.category, category) == 0);  // Конкретная категория
+            }
+
+            if (categoryMatch && item.weight >= low && item.weight <= high) {
+                WriteToTmpFile(item);
+                matches++;
+            }
+        }
+    }
+
+    if (matches == 0) {
+        std::cout << "No items found.\n";
+        system("pause");
+        return;
+    }
+
+    SortTmpFileByCost_Desc();
+
+    std::cout << "\n=== RESULTS (sorted by cost/unit DESC) ===\n";
+    std::cout << "Found: " << matches << " item(s)\n";
+    if (filterType == 0) {
+        std::cout << "Filter: Items WITHOUT category\n";
+    }
+    else if (filterType == 1) {
+        std::cout << "Filter: Category = " << category << "\n";
+    }
+    else {
+        std::cout << "Filter: All categories\n";
+    }
+    std::cout << "Weight range: " << std::fixed << std::setprecision(2) << low 
+              << " - " << high << " kg\n\n";
+    PrintTmpFileTable();
+
+    remove(TMP_FILE);
+    system("pause");
+}
+
+void ViewInventoryByCategory() {
+    int n = GetRecordCount();
+    if (n == 0) {
+        std::cout << "Inventory is empty.\n";
+        system("pause");
+        return;
+    }
+
+    ClearTmpFile();
+
+    // Копирование всех данных во временный файл для сортировки
+    std::ifstream src(FILENAME, std::ios::binary);
+    std::ofstream tmp(TMP_FILE, std::ios::binary);
+    Inventory item{};
+    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE))
+        tmp.write(reinterpret_cast<char*>(&item), REC_SIZE);
+    src.close(); tmp.close();
+
+    // Сортировка вставками: сначала по категории, потом по имени
+    int tmpN = GetTmpRecordCount();
+    for (int i = 1; i < tmpN; ++i) {
+        Inventory key{};
+        std::ifstream tIn(TMP_FILE, std::ios::binary);
+        tIn.seekg(i * REC_SIZE);
+        tIn.read(reinterpret_cast<char*>(&key), REC_SIZE);
+        tIn.close();
+
+        int j = i - 1;
+        while (j >= 0) {
+            Inventory curr{};
+            std::ifstream tIn2(TMP_FILE, std::ios::binary);
+            tIn2.seekg(j * REC_SIZE);
+            tIn2.read(reinterpret_cast<char*>(&curr), REC_SIZE);
+            tIn2.close();
+
+            int catCmp = _stricmp(curr.category, key.category);
+            int nameCmp = (catCmp == 0) ? _stricmp(curr.item_name, key.item_name) : catCmp;
+
+            if (nameCmp > 0) {
+                std::fstream tOut(TMP_FILE, std::ios::binary | std::ios::in | std::ios::out);
+                tOut.seekp((j + 1) * REC_SIZE);
+                tOut.write(reinterpret_cast<char*>(&curr), REC_SIZE);
+                tOut.close();
+                --j;
+            }
+            else break;
+        }
+        std::fstream tOut(TMP_FILE, std::ios::binary | std::ios::in | std::ios::out);
+        tOut.seekp((j + 1) * REC_SIZE);
+        tOut.write(reinterpret_cast<char*>(&key), REC_SIZE);
+        tOut.close();
+    }
+
+    // Вывод с группировкой по категориям
+    std::cout << "\n=== INVENTORY BY CATEGORY ===\n";
+    char currentCat[MAX_LEN] = "";
+    bool firstItem = true;
+
+    std::ifstream tView(TMP_FILE, std::ios::binary);
+    Inventory viewItem{};
+    while (tView.read(reinterpret_cast<char*>(&viewItem), REC_SIZE)) {
+        bool currentEmpty = IsStringEmpty(currentCat);
+        bool viewEmpty = IsStringEmpty(viewItem.category);
+        bool categoryChanged = (currentEmpty != viewEmpty) || 
+                               (!currentEmpty && !viewEmpty && _stricmp(currentCat, viewItem.category) != 0);
+
+        if (categoryChanged || firstItem) {
+            strcpy_s(currentCat, viewItem.category);
+            if (viewEmpty) {
+                std::cout << "\n>>> Category: (none/empty) <<<\n";
+            }
+            else {
+                std::cout << "\n>>> Category: " << currentCat << " <<<\n";
+            }
+            firstItem = false;
+        }
+        std::cout << " - " << viewItem.item_name
+            << " (x" << viewItem.quantity
+            << ", " << std::fixed << std::setprecision(2) << viewItem.weight << "kg)\n";
+    }
+    tView.close();
+
+    // Анализ: поиск самого дорогого и тяжёлого набора
+    int maxCostIdx = -1, maxWeightIdx = -1;
+    double maxTotalCost = -1, maxTotalWeight = -1;
+
+    for (int i = 0; i < n; ++i) {
+        if (ReadRecordAt(i, item)) {
+            double totalCost = static_cast<double>(item.cost_per_unit) * item.quantity;
+            double totalWeight = item.weight * item.quantity;
+
+            if (totalCost > maxTotalCost) {
+                maxTotalCost = totalCost;
+                maxCostIdx = i;
+            }
+            if (totalWeight > maxTotalWeight) {
+                maxTotalWeight = totalWeight;
+                maxWeightIdx = i;
+            }
+        }
+    }
+
+    std::cout << "\n=== ANALYSIS ===\n";
+    if (maxCostIdx != -1 && ReadRecordAt(maxCostIdx, item)) {
+        std::cout << "Most expensive set: " << item.item_name
+            << " | Total: " << maxTotalCost << " gold\n";
+    }
+    if (maxWeightIdx != -1 && ReadRecordAt(maxWeightIdx, item)) {
+        std::cout << "Heaviest set: " << item.item_name
+            << " | Total: " << maxTotalWeight << " kg\n";
+    }
+
+    remove(TMP_FILE);
+    system("pause");
+}
+
 void GenerateReport() {
     int n = GetRecordCount();
     if (n == 0) {
-        MessageBox(g_hMainWnd, "Инвентарь пуст!", "Отчёт", MB_ICONINFORMATION);
+        std::cout << "Inventory is empty.\n";
+        system("pause");
         return;
     }
-    
+
     std::ofstream txt("inventory_report.txt");
     if (!txt) {
-        MessageBox(g_hMainWnd, "Ошибка создания отчёта!", "Ошибка", MB_ICONERROR);
+        std::cout << "Error creating report!\n";
+        system("pause");
         return;
     }
-    
+
     txt << "===== INVENTORY REPORT =====\n";
     txt << "Generated: " << __DATE__ << " " << __TIME__ << "\n\n";
-    
+
     Inventory item{};
-    int totalItems = 0, totalCost = 0;
-    double totalWeight = 0;
-    
+    int totalItems = 0, totalWeight = 0, totalCost = 0;
+
     for (int i = 0; i < n; ++i) {
         if (ReadRecordAt(i, item)) {
             txt << "Item: " << item.item_name << "\n";
-            txt << "  Category: " << item.category << "\n";
-            txt << "  Quest: " << (item.quest ? "Yes" : "No") << "\n";
-            txt << "  Cost/unit: " << item.cost_per_unit << " | Qty: " << item.quantity 
+            txt << " Category: " << (IsStringEmpty(item.category) ? "(none)" : item.category) << "\n";
+            txt << " Quest: " << (item.quest ? "Yes" : "No") << "\n";
+            txt << " Cost/unit: " << item.cost_per_unit << " | Qty: " << item.quantity
                 << " | Total: " << item.Full_cost() << "\n";
-            txt << "  Weight/unit: " << item.weight << " | Total weight: " 
-                << (item.weight * item.quantity) << "\n\n";
-            
+            txt << " Weight/unit: " << std::fixed << std::setprecision(2) << item.weight 
+                << " | Total weight: " << (item.weight * item.quantity) << "\n\n";
+
             totalItems += item.quantity;
-            totalWeight += item.weight * item.quantity;
+            totalWeight += static_cast<int>(item.weight * item.quantity);
             totalCost += item.Full_cost();
         }
     }
-    
+
     txt << "===== SUMMARY =====\n";
     txt << "Total unique items: " << n << "\n";
     txt << "Total quantity: " << totalItems << "\n";
     txt << "Total weight: " << totalWeight << " kg\n";
     txt << "Total value: " << totalCost << " gold\n";
     txt.close();
-    
-    MessageBox(g_hMainWnd, "Отчёт сохранён в 'inventory_report.txt'", "Отчёт", MB_ICONINFORMATION);
-    ShellExecute(NULL, "open", "inventory_report.txt", NULL, NULL, SW_SHOWNORMAL);
+
+    std::cout << "Report saved to 'inventory_report.txt'\n";
+    system("pause");
 }
-// ==================== LISTVIEW ФУНКЦИИ ====================
-void InitListView(HWND hList) {
-    ListView_SetExtendedListViewStyle(hList, 
-        LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
-    
-    LVCOLUMN lvc = {};
-    lvc.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
-    
-    const char* columns[] = {"Название", "Квест", "Цена", "Категория", "Вес", "Кол-во", "Всего"};
-    int widths[] = {150, 60, 80, 120, 80, 70, 100};
-    
-    for (int i = 0; i < 7; i++) {
-        lvc.iSubItem = i;
-        lvc.pszText = (LPSTR)columns[i];
-        lvc.cx = widths[i];
-        ListView_InsertColumn(hList, i, &lvc);
-    }
-}
-void RefreshListView() {
-    ListView_DeleteAllItems(g_hListView);
-    
+
+void HelpWithOverload() {
     int n = GetRecordCount();
+    if (n == 0) {
+        std::cout << "Inventory is empty.\n";
+        system("pause");
+        return;
+    }
+
+    int worstIdx = -1;
+    double worstRatio = 1e9;
     Inventory item{};
-    
-    for (int i = 0; i < n; i++) {
-        if (ReadRecordAt(i, item)) {
-            LVITEM lvi = {};
-            lvi.mask = LVIF_TEXT | LVIF_PARAM;
-            lvi.iItem = i;
-            lvi.lParam = i;
-            lvi.pszText = item.item_name;
-            int idx = ListView_InsertItem(g_hListView, &lvi);
-            
-            ListView_SetItemText(g_hListView, idx, 1, (LPSTR)(item.quest ? "Да" : "Нет"));
-            
-            char buf[64];
-            sprintf(buf, "%d", item.cost_per_unit);
-            ListView_SetItemText(g_hListView, idx, 2, buf);
-            
-            ListView_SetItemText(g_hListView, idx, 3, item.category);
-            
-            sprintf(buf, "%.2f", item.weight);
-            ListView_SetItemText(g_hListView, idx, 4, buf);
-            
-            sprintf(buf, "%d", item.quantity);
-            ListView_SetItemText(g_hListView, idx, 5, buf);
-            
-            sprintf(buf, "%d", item.Full_cost());
-            ListView_SetItemText(g_hListView, idx, 6, buf);
-        }
-    }
-    
-    // Обновление статусбара
-    char status[128];
-    sprintf(status, "Предметов: %d", n);
-    SendMessage(g_hStatusBar, SB_SETTEXT, 0, (LPARAM)status);
-}
-int GetSelectedIndex() {
-    return ListView_GetNextItem(g_hListView, -1, LVNI_SELECTED);
-}
-// ==================== ДИАЛОГ ДОБАВЛЕНИЯ/РЕДАКТИРОВАНИЯ ====================
-Inventory g_DialogItem;
-bool g_IsEditMode = false;
-INT_PTR CALLBACK ItemDialogProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-        case WM_INITDIALOG: {
-            // Центрирование диалога
-            RECT rc, rcOwner;
-            GetWindowRect(g_hMainWnd, &rcOwner);
-            GetWindowRect(hDlg, &rc);
-            int x = rcOwner.left + (rcOwner.right - rcOwner.left - (rc.right - rc.left)) / 2;
-            int y = rcOwner.top + (rcOwner.bottom - rcOwner.top - (rc.bottom - rc.top)) / 2;
-            SetWindowPos(hDlg, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-            
-            // Заполнение полей при редактировании
-            if (g_IsEditMode) {
-                SetWindowText(hDlg, "Редактировать предмет");
-                SetDlgItemText(hDlg, IDC_EDIT_NAME, g_DialogItem.item_name);
-                SetDlgItemText(hDlg, IDC_EDIT_CATEGORY, g_DialogItem.category);
-                SetDlgItemInt(hDlg, IDC_EDIT_COST, g_DialogItem.cost_per_unit, FALSE);
-                
-                char buf[32];
-                sprintf(buf, "%.2f", g_DialogItem.weight);
-                SetDlgItemText(hDlg, IDC_EDIT_WEIGHT, buf);
-                
-                SetDlgItemInt(hDlg, IDC_EDIT_QTY, g_DialogItem.quantity, FALSE);
-                CheckDlgButton(hDlg, IDC_CHECK_QUEST, g_DialogItem.quest ? BST_CHECKED : BST_UNCHECKED);
-            } else {
-                SetWindowText(hDlg, "Добавить предмет");
-            }
-            return TRUE;
-        }
-        
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDOK: {
-                    // Получение данных из полей
-                    GetDlgItemText(hDlg, IDC_EDIT_NAME, g_DialogItem.item_name, MAX_LEN);
-                    GetDlgItemText(hDlg, IDC_EDIT_CATEGORY, g_DialogItem.category, MAX_LEN);
-                    g_DialogItem.cost_per_unit = GetDlgItemInt(hDlg, IDC_EDIT_COST, NULL, FALSE);
-                    
-                    char buf[32];
-                    GetDlgItemText(hDlg, IDC_EDIT_WEIGHT, buf, 32);
-                    g_DialogItem.weight = atof(buf);
-                    
-                    g_DialogItem.quantity = GetDlgItemInt(hDlg, IDC_EDIT_QTY, NULL, FALSE);
-                    g_DialogItem.quest = (IsDlgButtonChecked(hDlg, IDC_CHECK_QUEST) == BST_CHECKED);
-                    
-                    // Валидация
-                    if (strlen(g_DialogItem.item_name) == 0) {
-                        MessageBox(hDlg, "Введите название предмета!", "Ошибка", MB_ICONWARNING);
-                        return TRUE;
-                    }
-                    
-                    EndDialog(hDlg, IDOK);
-                    return TRUE;
-                }
-                
-                case IDCANCEL:
-                    EndDialog(hDlg, IDCANCEL);
-                    return TRUE;
-            }
-            break;
-            
-        case WM_CLOSE:
-            EndDialog(hDlg, IDCANCEL);
-            return TRUE;
-    }
-    return FALSE;
-}
-// Создание диалога программно (без ресурсов)
-INT_PTR ShowItemDialog(HWND hParent, bool editMode) {
-    g_IsEditMode = editMode;
-    if (!editMode) {
-        memset(&g_DialogItem, 0, sizeof(g_DialogItem));
-    }
-    
-    // Создание шаблона диалога в памяти
-    #pragma pack(push, 4)
-    struct {
-        DLGTEMPLATE dlg;
-        WORD menu, wndClass, title;
-        // Контролы добавим через CreateWindow в WM_INITDIALOG
-    } dlgTemplate = {};
-    #pragma pack(pop)
-    
-    dlgTemplate.dlg.style = DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU;
-    dlgTemplate.dlg.dwExtendedStyle = 0;
-    dlgTemplate.dlg.cdit = 0;
-    dlgTemplate.dlg.x = 0;
-    dlgTemplate.dlg.y = 0;
-    dlgTemplate.dlg.cx = 200;
-    dlgTemplate.dlg.cy = 180;
-    
-    // Используем обычное окно вместо DialogBox для большего контроля
-    HWND hDlg = CreateWindowEx(
-        WS_EX_DLGMODALFRAME,
-        WC_DIALOG,
-        editMode ? "Редактировать предмет" : "Добавить предмет",
-        WS_VISIBLE | WS_POPUP | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 350, 320,
-        hParent,
-        NULL,
-        g_hInst,
-        NULL
-    );
-    
-    if (!hDlg) return IDCANCEL;
-    
-    // Центрирование
-    RECT rc, rcOwner;
-    GetWindowRect(hParent, &rcOwner);
-    GetWindowRect(hDlg, &rc);
-    int x = rcOwner.left + (rcOwner.right - rcOwner.left - (rc.right - rc.left)) / 2;
-    int y = rcOwner.top + (rcOwner.bottom - rcOwner.top - (rc.bottom - rc.top)) / 2;
-    SetWindowPos(hDlg, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-    
-    // Создание контролов
-    int yPos = 15;
-    int labelWidth = 80;
-    int editWidth = 220;
-    int height = 22;
-    int spacing = 30;
-    
-    CreateWindow("STATIC", "Название:", WS_VISIBLE | WS_CHILD, 
-        15, yPos, labelWidth, height, hDlg, NULL, g_hInst, NULL);
-    HWND hName = CreateWindowEx(WS_EX_CLIENTEDGE, "EDIT", "", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_AUTOHSCROLL, 
-        100, yPos, editWidth, height, hDlg, (HMENU)IDC_EDIT_NAME, g_hInst, NULL);
-    yPos += spacing;
-    
-    CreateWindow("STATIC", "Категория:", WS_VISIBLE | WS_CHILD, 
-        15, yPos, labelWidth, height, hDlg, NULL, g_hInst, NULL);
-    HWND hCat = CreateWindowEx(WS_EX_CLIENTEDGE, "EDIT", "", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_AUTOHSCROLL, 
-        100, yPos, editWidth, height, hDlg, (HMENU)IDC_EDIT_CATEGORY, g_hInst, NULL);
-    yPos += spacing;
-    
-    CreateWindow("STATIC", "Цена:", WS_VISIBLE | WS_CHILD, 
-        15, yPos, labelWidth, height, hDlg, NULL, g_hInst, NULL);
-    HWND hCost = CreateWindowEx(WS_EX_CLIENTEDGE, "EDIT", "", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_NUMBER, 
-        100, yPos, editWidth, height, hDlg, (HMENU)IDC_EDIT_COST, g_hInst, NULL);
-    yPos += spacing;
-    
-    CreateWindow("STATIC", "Вес:", WS_VISIBLE | WS_CHILD, 
-        15, yPos, labelWidth, height, hDlg, NULL, g_hInst, NULL);
-    HWND hWeight = CreateWindowEx(WS_EX_CLIENTEDGE, "EDIT", "", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP, 
-        100, yPos, editWidth, height, hDlg, (HMENU)IDC_EDIT_WEIGHT, g_hInst, NULL);
-    yPos += spacing;
-    
-    CreateWindow("STATIC", "Кол-во:", WS_VISIBLE | WS_CHILD, 
-        15, yPos, labelWidth, height, hDlg, NULL, g_hInst, NULL);
-    HWND hQty = CreateWindowEx(WS_EX_CLIENTEDGE, "EDIT", "", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_NUMBER, 
-        100, yPos, editWidth, height, hDlg, (HMENU)IDC_EDIT_QTY, g_hInst, NULL);
-    yPos += spacing;
-    
-    HWND hQuest = CreateWindow("BUTTON", "Квестовый предмет", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 
-        100, yPos, 150, height, hDlg, (HMENU)IDC_CHECK_QUEST, g_hInst, NULL);
-    yPos += spacing + 10;
-    
-    HWND hOK = CreateWindow("BUTTON", "OK", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_DEFPUSHBUTTON, 
-        80, yPos, 80, 28, hDlg, (HMENU)IDOK, g_hInst, NULL);
-    HWND hCancel = CreateWindow("BUTTON", "Отмена", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP, 
-        180, yPos, 80, 28, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
-    
-    // Шрифт
-    HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-    EnumChildWindows(hDlg, [](HWND hwnd, LPARAM lParam) -> BOOL {
-        SendMessage(hwnd, WM_SETFONT, lParam, TRUE);
-        return TRUE;
-    }, (LPARAM)hFont);
-    
-    // Заполнение при редактировании
-    if (editMode) {
-        SetDlgItemText(hDlg, IDC_EDIT_NAME, g_DialogItem.item_name);
-        SetDlgItemText(hDlg, IDC_EDIT_CATEGORY, g_DialogItem.category);
-        SetDlgItemInt(hDlg, IDC_EDIT_COST, g_DialogItem.cost_per_unit, FALSE);
-        
-        char buf[32];
-        sprintf(buf, "%.2f", g_DialogItem.weight);
-        SetDlgItemText(hDlg, IDC_EDIT_WEIGHT, buf);
-        
-        SetDlgItemInt(hDlg, IDC_EDIT_QTY, g_DialogItem.quantity, FALSE);
-        CheckDlgButton(hDlg, IDC_CHECK_QUEST, g_DialogItem.quest ? BST_CHECKED : BST_UNCHECKED);
-    }
-    
-    // Модальный цикл
-    EnableWindow(hParent, FALSE);
-    ShowWindow(hDlg, SW_SHOW);
-    SetFocus(hName);
-    
-    INT_PTR result = IDCANCEL;
-    MSG msg;
-    
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        if (msg.hwnd == hDlg || IsChild(hDlg, msg.hwnd)) {
-            if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) {
-                result = IDCANCEL;
-                break;
-            }
-            if (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) {
-                msg.message = WM_COMMAND;
-                msg.wParam = IDOK;
+
+    // Поиск предмета с минимальным соотношением цена/вес
+    // Квестовые предметы исключаются (их нельзя выбрасывать)
+    for (int i = 0; i < n; ++i) {
+        if (ReadRecordAt(i, item) && !item.quest && item.weight > 0.001) {
+            double ratio = static_cast<double>(item.cost_per_unit) / item.weight;
+            if (ratio < worstRatio) {
+                worstRatio = ratio;
+                worstIdx = i;
             }
         }
-        
-        if (msg.message == WM_COMMAND) {
-            if (LOWORD(msg.wParam) == IDOK) {
-                // Получение данных
-                GetDlgItemText(hDlg, IDC_EDIT_NAME, g_DialogItem.item_name, MAX_LEN);
-                GetDlgItemText(hDlg, IDC_EDIT_CATEGORY, g_DialogItem.category, MAX_LEN);
-                g_DialogItem.cost_per_unit = GetDlgItemInt(hDlg, IDC_EDIT_COST, NULL, FALSE);
-                
-                char buf[32];
-                GetDlgItemText(hDlg, IDC_EDIT_WEIGHT, buf, 32);
-                g_DialogItem.weight = atof(buf);
-                
-                g_DialogItem.quantity = GetDlgItemInt(hDlg, IDC_EDIT_QTY, NULL, FALSE);
-                g_DialogItem.quest = (IsDlgButtonChecked(hDlg, IDC_CHECK_QUEST) == BST_CHECKED);
-                
-                if (strlen(g_DialogItem.item_name) == 0) {
-                    MessageBox(hDlg, "Введите название предмета!", "Ошибка", MB_ICONWARNING);
-                    continue;
-                }
-                
-                result = IDOK;
-                break;
-            }
-            if (LOWORD(msg.wParam) == IDCANCEL) {
-                result = IDCANCEL;
-                break;
-            }
-        }
-        
-        if (!IsWindow(hDlg)) break;
-        
-        if (!IsDialogMessage(hDlg, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
     }
-    
-    EnableWindow(hParent, TRUE);
-    DestroyWindow(hDlg);
-    SetForegroundWindow(hParent);
-    
-    return result;
-}
-// ==================== ДИАЛОГ ПОИСКА ====================
-void ShowSearchDialog() {
-    char searchName[MAX_LEN] = "";
-    
-    HWND hDlg = CreateWindowEx(
-        WS_EX_DLGMODALFRAME,
-        WC_DIALOG,
-        "Поиск по названию",
-        WS_VISIBLE | WS_POPUP | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 350, 120,
-        g_hMainWnd,
-        NULL,
-        g_hInst,
-        NULL
-    );
-    
-    if (!hDlg) return;
-    
-    // Центрирование
-    RECT rc, rcOwner;
-    GetWindowRect(g_hMainWnd, &rcOwner);
-    GetWindowRect(hDlg, &rc);
-    int x = rcOwner.left + (rcOwner.right - rcOwner.left - (rc.right - rc.left)) / 2;
-    int y = rcOwner.top + (rcOwner.bottom - rcOwner.top - (rc.bottom - rc.top)) / 2;
-    SetWindowPos(hDlg, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-    
-    CreateWindow("STATIC", "Название:", WS_VISIBLE | WS_CHILD, 
-        15, 20, 70, 22, hDlg, NULL, g_hInst, NULL);
-    HWND hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, "EDIT", "", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | ES_AUTOHSCROLL, 
-        90, 18, 230, 24, hDlg, (HMENU)1001, g_hInst, NULL);
-    
-    HWND hOK = CreateWindow("BUTTON", "Найти", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_DEFPUSHBUTTON, 
-        90, 55, 80, 28, hDlg, (HMENU)IDOK, g_hInst, NULL);
-    HWND hCancel = CreateWindow("BUTTON", "Отмена", 
-        WS_VISIBLE | WS_CHILD | WS_TABSTOP, 
-        180, 55, 80, 28, hDlg, (HMENU)IDCANCEL, g_hInst, NULL);
-    
-    HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-    EnumChildWindows(hDlg, [](HWND hwnd, LPARAM lParam) -> BOOL {
-        SendMessage(hwnd, WM_SETFONT, lParam, TRUE);
-        return TRUE;
-    }, (LPARAM)hFont);
-    
-    EnableWindow(g_hMainWnd, FALSE);
-    SetFocus(hEdit);
-    
-    MSG msg;
-    bool found = false;
-    
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) break;
-        
-        if (msg.message == WM_COMMAND || (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN)) {
-            if (LOWORD(msg.wParam) == IDOK || msg.wParam == VK_RETURN) {
-                GetDlgItemText(hDlg, 1001, searchName, MAX_LEN);
-                if (strlen(searchName) > 0) {
-                    int pos = LinearSearchByName(searchName);
-                    if (pos >= 0) {
-                        ListView_SetItemState(g_hListView, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
-                        ListView_SetItemState(g_hListView, pos, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-                        ListView_EnsureVisible(g_hListView, pos, FALSE);
-                        found = true;
-                    } else {
-                        MessageBox(hDlg, "Предмет не найден!", "Поиск", MB_ICONINFORMATION);
-                        continue;
-                    }
-                }
-                break;
-            }
-            if (LOWORD(msg.wParam) == IDCANCEL) break;
-        }
-        
-        if (!IsWindow(hDlg)) break;
-        
-        if (!IsDialogMessage(hDlg, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
+
+    if (worstIdx == -1) {
+        std::cout << "No suitable non-quest items found.\n";
     }
-    
-    EnableWindow(g_hMainWnd, TRUE);
-    DestroyWindow(hDlg);
-    SetForegroundWindow(g_hMainWnd);
-}
-// ==================== ГЛАВНОЕ ОКНО ====================
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch (msg) {
-        case WM_CREATE: {
-            // Панель кнопок
-            int btnY = 10;
-            int btnW = 120;
-            int btnH = 30;
-            int btnX = 10;
-            int spacing = 130;
-            
-            CreateWindow("BUTTON", "Добавить", WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_BTN_ADD, g_hInst, NULL);
-            btnX += spacing;
-            
-            CreateWindow("BUTTON", "Редактировать", WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_BTN_EDIT, g_hInst, NULL);
-            btnX += spacing;
-            
-            CreateWindow("BUTTON", "Удалить", WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_BTN_DELETE, g_hInst, NULL);
-            btnX += spacing;
-            
-            CreateWindow("BUTTON", "Поиск", WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_BTN_SEARCH, g_hInst, NULL);
-            btnX += spacing;
-            
-            CreateWindow("BUTTON", "Отчёт", WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_BTN_REPORT, g_hInst, NULL);
-            
-            // Вторая строка - сортировки
-            btnY = 50;
-            btnX = 10;
-            
-            CreateWindow("BUTTON", "Сорт. по весу", WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_BTN_SORT_WEIGHT, g_hInst, NULL);
-            btnX += spacing;
-            
-            CreateWindow("BUTTON", "Сорт. по кол-ву", WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_BTN_SORT_QTY, g_hInst, NULL);
-            btnX += spacing;
-            
-            CreateWindow("BUTTON", "Сорт. по имени", WS_VISIBLE | WS_CHILD | WS_TABSTOP,
-                btnX, btnY, btnW, btnH, hwnd, (HMENU)IDC_BTN_SORT_NAME, g_hInst, NULL);
-            
-            // ListView
-            g_hListView = CreateWindowEx(WS_EX_CLIENTEDGE, WC_LISTVIEW, NULL,
-                WS_VISIBLE | WS_CHILD | WS_TABSTOP | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
-                10, 90, 760, 400, hwnd, (HMENU)IDC_LISTVIEW, g_hInst, NULL);
-            
-            InitListView(g_hListView);
-            
-            // Status Bar
-            g_hStatusBar = CreateWindowEx(0, STATUSCLASSNAME, NULL,
-                WS_VISIBLE | WS_CHILD | SBARS_SIZEGRIP,
-                0, 0, 0, 0, hwnd, (HMENU)IDC_STATUSBAR, g_hInst, NULL);
-            
-            // Шрифт для всех контролов
-            HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-            EnumChildWindows(hwnd, [](HWND child, LPARAM lParam) -> BOOL {
-                SendMessage(child, WM_SETFONT, lParam, TRUE);
-                return TRUE;
-            }, (LPARAM)hFont);
-            
-            RefreshListView();
-            return 0;
-        }
-        
-        case WM_SIZE: {
-            RECT rc;
-            GetClientRect(hwnd, &rc);
-            
-            // Изменение размера ListView
-            int statusHeight = 22;
-            MoveWindow(g_hListView, 10, 90, rc.right - 20, rc.bottom - 90 - statusHeight - 10, TRUE);
-            
-            // Изменение размера StatusBar
-            SendMessage(g_hStatusBar, WM_SIZE, 0, 0);
-            return 0;
-        }
-        
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case IDC_BTN_ADD:
-                    if (ShowItemDialog(hwnd, false) == IDOK) {
-                        // Проверка на дубликат
-                        if (LinearSearchByName(g_DialogItem.item_name) >= 0) {
-                            MessageBox(hwnd, "Предмет с таким именем уже существует!", 
-                                "Ошибка", MB_ICONWARNING);
-                        } else {
-                            AddRecord(g_DialogItem);
-                            RefreshListView();
-                        }
-                    }
-                    break;
-                    
-                case IDC_BTN_EDIT: {
-                    int sel = GetSelectedIndex();
-                    if (sel < 0) {
-                        MessageBox(hwnd, "Выберите предмет для редактирования!", 
-                            "Внимание", MB_ICONINFORMATION);
-                        break;
-                    }
-                    ReadRecordAt(sel, g_DialogItem);
-                    if (ShowItemDialog(hwnd, true) == IDOK) {
-                        WriteRecordAt(sel, g_DialogItem);
-                        RefreshListView();
-                    }
-                    break;
-                }
-                
-                case IDC_BTN_DELETE: {
-                    int sel = GetSelectedIndex();
-                    if (sel < 0) {
-                        MessageBox(hwnd, "Выберите предмет для удаления!", 
-                            "Внимание", MB_ICONINFORMATION);
-                        break;
-                    }
-                    Inventory item{};
-                    ReadRecordAt(sel, item);
-                    
-                    char msg[256];
-                    sprintf(msg, "Удалить '%s'?", item.item_name);
-                    if (MessageBox(hwnd, msg, "Подтверждение", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-                        DeleteRecordAt(sel);
-                        RefreshListView();
-                    }
-                    break;
-                }
-                
-                case IDC_BTN_SEARCH:
-                    ShowSearchDialog();
-                    break;
-                    
-                case IDC_BTN_SORT_WEIGHT:
-                    SortByWeight();
-                    RefreshListView();
-                    MessageBox(hwnd, "Отсортировано по весу (пузырьковая сортировка)", 
-                        "Сортировка", MB_ICONINFORMATION);
-                    break;
-                    
-                case IDC_BTN_SORT_QTY:
-                    SortByQuantity();
-                    RefreshListView();
-                    MessageBox(hwnd, "Отсортировано по количеству (сортировка выбором)", 
-                        "Сортировка", MB_ICONINFORMATION);
-                    break;
-                    
-                case IDC_BTN_SORT_NAME:
-                    SortByName();
-                    RefreshListView();
-                    MessageBox(hwnd, "Отсортировано по имени (сортировка вставками)", 
-                        "Сортировка", MB_ICONINFORMATION);
-                    break;
-                    
-                case IDC_BTN_REPORT:
-                    GenerateReport();
-                    break;
-            }
-            return 0;
-            
-        case WM_NOTIFY: {
-            LPNMHDR pnmh = (LPNMHDR)lParam;
-            if (pnmh->idFrom == IDC_LISTVIEW && pnmh->code == NM_DBLCLK) {
-                // Двойной клик - редактирование
-                int sel = GetSelectedIndex();
-                if (sel >= 0) {
-                    ReadRecordAt(sel, g_DialogItem);
-                    if (ShowItemDialog(hwnd, true) == IDOK) {
-                        WriteRecordAt(sel, g_DialogItem);
-                        RefreshListView();
-                    }
-                }
-            }
-            return 0;
-        }
-        
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            return 0;
+    else {
+        ReadRecordAt(worstIdx, item);
+        std::cout << "\n=== LEAST COST-EFFECTIVE ITEM (NON-QUEST) ===\n";
+        PrintItem(item);
+        std::cout << "Cost/Weight ratio: " << worstRatio << " gold/kg\n";
+        std::cout << "Consider dropping this item first!\n";
     }
-    
-    return DefWindowProc(hwnd, msg, wParam, lParam);
-}
-// ==================== ТОЧКА ВХОДА ====================
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    g_hInst = hInstance;
-    
-    // Инициализация Common Controls
-    INITCOMMONCONTROLSEX icex = {};
-    icex.dwSize = sizeof(icex);
-    icex.dwICC = ICC_LISTVIEW_CLASSES | ICC_BAR_CLASSES;
-    InitCommonControlsEx(&icex);
-    
-    // Регистрация класса окна
-    WNDCLASSEX wc = {};
-    wc.cbSize = sizeof(wc);
-    wc.style = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc = WndProc;
-    wc.hInstance = hInstance;
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
-    wc.lpszClassName = "InventoryManagerClass";
-    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-    wc.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
-    
-    if (!RegisterClassEx(&wc)) {
-        MessageBox(NULL, "Ошибка регистрации класса окна!", "Ошибка", MB_ICONERROR);
-        return 1;
-    }
-    
-    // Создание главного окна
-    g_hMainWnd = CreateWindowEx(
-        0,
-        "InventoryManagerClass",
-        "Inventory Manager - Win32 GUI",
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
-        NULL, NULL, hInstance, NULL
-    );
-    
-    if (!g_hMainWnd) {
-        MessageBox(NULL, "Ошибка создания окна!", "Ошибка", MB_ICONERROR);
-        return 1;
-    }
-    
-    ShowWindow(g_hMainWnd, nCmdShow);
-    UpdateWindow(g_hMainWnd);
-    
-    // Цикл сообщений
-    MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-    
-    return (int)msg.wParam;
+    system("pause");
 }
