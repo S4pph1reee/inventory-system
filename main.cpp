@@ -579,21 +579,33 @@ int SelectCategoryForSearch(char* category, int size) {
 }
 
 int LinearSearchInFile(const char* name) {
-    int n = GetRecordCount();
+    std::ifstream src(FILENAME, std::ios::binary);
+    if (!src) return -1;
+
     Inventory temp{};
-    for (int i = 0; i < n; ++i)
-        if (ReadRecordAt(i, temp) && _stricmp(temp.item_name, name) == 0)
-            return i;
+    int index = 0;
+    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
+        if (_stricmp(temp.item_name, name) == 0)
+            return index;
+        ++index;
+    }
     return -1;
 }
 
 int LinearSearchExcludingIndex(const char* name, int excludeIndex) {
-    int n = GetRecordCount();
+    std::ifstream src(FILENAME, std::ios::binary);
+    if (!src) return -1;
+
     Inventory temp{};
-    for (int i = 0; i < n; ++i) {
-        if (i == excludeIndex) continue;
-        if (ReadRecordAt(i, temp) && _stricmp(temp.item_name, name) == 0)
-            return i;
+    int index = 0;
+    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
+        if (index == excludeIndex) {
+            ++index;
+            continue;
+        }
+        if (_stricmp(temp.item_name, name) == 0)
+            return index;
+        ++index;
     }
     return -1;
 }
