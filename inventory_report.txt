@@ -1,11 +1,53 @@
 ===== INVENTORY REPORT =====
-Generated: Mar 30 2026 23:18:57
+Generated: Apr 14 2026 09:07:07
+
+Item: Infused Raindrops
+ Category: Equipment
+ Quest: Yes
+ Cost/unit: 225 | Qty: 1 | Total: 225
+ Weight/unit: 0.01 | Total weight: 0.01
+
+Item: Refresher Orb
+ Category: Magic
+ Quest: Yes
+ Cost/unit: 5000 | Qty: 1 | Total: 5000
+ Weight/unit: 0.07 | Total weight: 0.07
+
+Item: Bottle
+ Category: Consumables
+ Quest: Yes
+ Cost/unit: 675 | Qty: 1 | Total: 675
+ Weight/unit: 0.10 | Total weight: 0.10
+
+Item: Cornucopia
+ Category: Hidden
+ Quest: Yes
+ Cost/unit: 1200 | Qty: 1 | Total: 1200
+ Weight/unit: 0.40 | Total weight: 0.40
+
+Item: Blink Dagger
+ Category: Miscellaneous
+ Quest: Yes
+ Cost/unit: 2250 | Qty: 1 | Total: 2250
+ Weight/unit: 0.80 | Total weight: 0.80
+
+Item: Boots of Speed
+ Category: Miscellaneous
+ Quest: Yes
+ Cost/unit: 500 | Qty: 1 | Total: 500
+ Weight/unit: 1.00 | Total weight: 1.00
 
 Item: Armlet of Mordiggian
  Category: Weapon
  Quest: Yes
  Cost/unit: 2500 | Qty: 1 | Total: 2500
  Weight/unit: 1.10 | Total weight: 1.10
+
+Item: Quelling Blade
+ Category: Equipment
+ Quest: Yes
+ Cost/unit: 100 | Qty: 1 | Total: 100
+ Weight/unit: 1.60 | Total weight: 1.60
 
 Item: Battle Fury
  Category: Weapon
@@ -25,47 +67,17 @@ Item: Blade Mail
  Cost/unit: 2100 | Qty: 1 | Total: 2100
  Weight/unit: 3.00 | Total weight: 3.00
 
-Item: Blink Dagger
- Category: Miscellaneous
+Item: Rapier Divine
+ Category: Weapon
  Quest: Yes
- Cost/unit: 2250 | Qty: 1 | Total: 2250
- Weight/unit: 0.80 | Total weight: 0.80
+ Cost/unit: 4356 | Qty: 3 | Total: 13068
+ Weight/unit: 1.56 | Total weight: 4.68
 
-Item: Boots of Speed
- Category: Miscellaneous
- Quest: Yes
- Cost/unit: 500 | Qty: 1 | Total: 500
- Weight/unit: 1.00 | Total weight: 1.00
-
-Item: Bottle
+Item: Smoke of Deceit
  Category: Consumables
- Quest: Yes
- Cost/unit: 675 | Qty: 1 | Total: 675
- Weight/unit: 0.10 | Total weight: 0.10
-
-Item: Butterfly
- Category: Weapon
- Quest: Yes
- Cost/unit: 5450 | Qty: 6 | Total: 32700
- Weight/unit: 1.20 | Total weight: 7.20
-
-Item: Cornucopia
- Category: Hidden
- Quest: Yes
- Cost/unit: 1200 | Qty: 1 | Total: 1200
- Weight/unit: 0.40 | Total weight: 0.40
-
-Item: Divine Rapier
- Category: Weapon
- Quest: Yes
- Cost/unit: 5600 | Qty: 6 | Total: 33600
- Weight/unit: 1.56 | Total weight: 9.36
-
-Item: Infused Raindrops
- Category: Equipment
- Quest: Yes
- Cost/unit: 225 | Qty: 1 | Total: 225
- Weight/unit: 0.01 | Total weight: 0.01
+ Quest: No
+ Cost/unit: 50 | Qty: 3 | Total: 150
+ Weight/unit: 0.01 | Total weight: 0.03
 
 Item: Iron Branch
  Category: Attributes
@@ -79,26 +91,20 @@ Item: Javelin
  Cost/unit: 900 | Qty: 4 | Total: 3600
  Weight/unit: 1.30 | Total weight: 5.20
 
-Item: Quelling Blade
- Category: Equipment
+Item: Butterfly
+ Category: Weapon
  Quest: Yes
- Cost/unit: 100 | Qty: 1 | Total: 100
- Weight/unit: 1.60 | Total weight: 1.60
+ Cost/unit: 5450 | Qty: 6 | Total: 32700
+ Weight/unit: 1.20 | Total weight: 7.20
 
-Item: Refresher Orb
- Category: Magic
+Item: Divine Rapier
+ Category: Weapon
  Quest: Yes
- Cost/unit: 5000 | Qty: 1 | Total: 5000
- Weight/unit: 0.07 | Total weight: 0.07
-
-Item: Smoke of Deceit
- Category: Consumables
- Quest: No
- Cost/unit: 50 | Qty: 3 | Total: 150
- Weight/unit: 0.01 | Total weight: 0.03
+ Cost/unit: 5600 | Qty: 6 | Total: 33600
+ Weight/unit: 1.56 | Total weight: 9.36
 
 ===== SUMMARY =====
-Total unique items: 16
-Total quantity: 34
-Total weight: 31 kg
-Total value: 92950 gold
+Total unique items: 17
+Total quantity: 37
+Total weight: 35 kg
+Total value: 106018 gold

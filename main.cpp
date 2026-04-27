@@ -15,14 +15,13 @@
 #pragma pack(push, 1)  // Упаковка структуры без выравнивания (для бинарного файла)
 const int MAX_LEN = 100;  // Максимальная длина строковых полей
 
-// ОГРАНИЧЕНИЯ НА ЧИСЛОВЫЕ ЗНАЧЕНИЯ (для отображения в таблице)
+// ОГРАНИЧЕНИЯ НА ЧИСЛОВЫЕ ЗНАЧЕНИЯ
 const double MAX_WEIGHT = 999.99;      // 6 символов
 const int MAX_QUANTITY = 9999;         // 4 символа
 const int MAX_COST_PER_UNIT = 99999;   // 5 символов
 const int MAX_TOTAL_COST = 999999;     // 6 символов
 
 // Структура предмета инвентаря
-// pragma pack(1) обеспечивает плотную упаковку без паддинга между полями
 #pragma pack(push, 1)
 struct Inventory {
     char item_name[MAX_LEN];    // Название предмета
@@ -31,7 +30,6 @@ struct Inventory {
     char category[MAX_LEN];     // Категория (может быть пустой)
     double weight;              // Вес за единицу
     int quantity;               // Количество
-
     int Full_cost() const { return cost_per_unit * quantity; }  // Общая стоимость
 };
 #pragma pack(pop)
@@ -120,6 +118,9 @@ void SortFileByQuantity_Selection();
 
 // Сортировка файла вставками по имени
 void SortFileByName_Insertion();
+
+// Потоковая сортировка файла по заданному компаратору
+void SortFile_Stream(bool (*comesBefore)(const Inventory&, const Inventory&));
 
 // Записывает предмет во временный файл
 // Используется для поиска и фильтрации
@@ -853,15 +854,9 @@ void SortFileByWeight_Bubble() {
         system("pause"); 
         return; 
     }
-    // O(n²)
-    for (int i = 0; i < n - 1; ++i)
-        for (int j = 0; j < n - i - 1; ++j) {
-            Inventory a{}, b{};
-            ReadRecordAt(j, a);
-            ReadRecordAt(j + 1, b);
-            if (a.weight > b.weight)
-                SwapRecords(j, j + 1);
-        }
+    SortFile_Stream([](const Inventory& a, const Inventory& b) {
+        return a.weight < b.weight;
+    });
     std::cout << "Sorted by weight!\n";
     system("pause");
 }
@@ -917,21 +912,9 @@ void SortFileByQuantity_Selection() {
         system("pause"); 
         return; 
     }
-    // O(n²)
-    for (int i = 0; i < n - 1; ++i) {
-        int min_idx = i;
-        Inventory min_item{};
-        ReadRecordAt(i, min_item);
-        for (int j = i + 1; j < n; ++j) {
-            Inventory curr{};
-            ReadRecordAt(j, curr);
-            if (curr.quantity < min_item.quantity) {
-                min_item = curr;
-                min_idx = j;
-            }
-        }
-        if (min_idx != i) SwapRecords(i, min_idx);
-    }
+    SortFile_Stream([](const Inventory& a, const Inventory& b) {
+        return a.quantity < b.quantity;
+    });
     std::cout << "Sorted by quantity (selection)!\n";
     PrintItemTable();
     system("pause");
@@ -944,25 +927,54 @@ void SortFileByName_Insertion() {
         system("pause"); 
         return; 
     }
-    // O(n²)
-    for (int i = 1; i < n; ++i) {
-        Inventory key{};
-        ReadRecordAt(i, key);
-        int j = i - 1;
-        while (j >= 0) {
-            Inventory curr{};
-            ReadRecordAt(j, curr);
-            if (_stricmp(curr.item_name, key.item_name) > 0) {
-                WriteRecordAt(j + 1, curr);
-                --j;
-            }
-            else break;
-        }
-        WriteRecordAt(j + 1, key);
-    }
+    SortFile_Stream([](const Inventory& a, const Inventory& b) {
+        return _stricmp(a.item_name, b.item_name) < 0;
+    });
     std::cout << "Sorted by name (insertion)!\n";
     PrintItemTable();
     system("pause");
+}
+
+void SortFile_Stream(bool (*comesBefore)(const Inventory&, const Inventory&)) {
+    const char* SORTED_FILE = TMP_FILE;
+    const char* WORK_FILE = "inventory_work.bin";
+
+    std::ifstream src(FILENAME, std::ios::binary);
+    if (!src) return;
+
+    std::ofstream initSorted(SORTED_FILE, std::ios::binary | std::ios::trunc);
+    initSorted.close();
+
+    Inventory item{};
+    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
+        std::ifstream sortedIn(SORTED_FILE, std::ios::binary);
+        std::ofstream workOut(WORK_FILE, std::ios::binary | std::ios::trunc);
+        if (!workOut) {
+            sortedIn.close();
+            break;
+        }
+
+        bool inserted = false;
+        Inventory current{};
+        while (sortedIn.read(reinterpret_cast<char*>(&current), REC_SIZE)) {
+            if (!inserted && comesBefore(item, current)) {
+                workOut.write(reinterpret_cast<const char*>(&item), REC_SIZE);
+                inserted = true;
+            }
+            workOut.write(reinterpret_cast<const char*>(&current), REC_SIZE);
+        }
+        if (!inserted)
+            workOut.write(reinterpret_cast<const char*>(&item), REC_SIZE);
+
+        sortedIn.close();
+        workOut.close();
+        remove(SORTED_FILE);
+        rename(WORK_FILE, SORTED_FILE);
+    }
+
+    src.close();
+    remove(FILENAME);
+    rename(SORTED_FILE, FILENAME);
 }
 
 void WriteToTmpFile(const Inventory& item) {
