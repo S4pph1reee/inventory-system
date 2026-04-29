@@ -2,25 +2,16 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug inventory-system",
-            "type": "cppdbg",
+            "name": "Debug C++ project (main.exe)",
+            "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}\\inventory-system.exe",
+            "program": "${workspaceFolder}\\main.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": true,
-            "MIMode": "gdb",
-            "miDebuggerPath": "D:/Apps/MSYS2/ucrt64/bin/gdb.exe",
-            "preLaunchTask": "Build inventory-system (g++)",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ]
+            "preLaunchTask": "Build C++ project (MSVC Build Tools)"
         }
     ]
 }

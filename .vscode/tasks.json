@@ -2,21 +2,21 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build inventory-system (g++)",
-            "type": "shell",
-            "command": "D:\\Apps\\MSYS2\\ucrt64\\bin\\g++.exe",
+            "label": "Build C++ project (MSVC Build Tools)",
+            "type": "process",
+            "command": "powershell",
             "args": [
-                "-fdiagnostics-color=always",
-                "-g",
-                "${workspaceFolder}\\main.cpp",
-                "-o",
-                "${workspaceFolder}\\inventory-system.exe"
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "${workspaceFolder}\\.vscode\\build-msvc.ps1"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
             },
             "problemMatcher": [
-                "$gcc"
+                "$msCompile"
             ],
             "group": {
                 "kind": "build",
