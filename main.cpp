@@ -8,175 +8,115 @@
 #include <limits>
 #include <iomanip>
 
-// ============================================================================
-// КОНСТАНТЫ И СТРУКТУРЫ
-// ============================================================================
+#pragma pack(push, 1)
+const int MAX_LEN = 100;
 
-#pragma pack(push, 1)  // Упаковка структуры без выравнивания (для бинарного файла)
-const int MAX_LEN = 100;  // Максимальная длина строковых полей
+const double MAX_WEIGHT = 999.99;
+const int MAX_QUANTITY = 9999;
+const int MAX_COST_PER_UNIT = 99999;
+const int MAX_TOTAL_COST = 999999;
 
-// ОГРАНИЧЕНИЯ НА ЧИСЛОВЫЕ ЗНАЧЕНИЯ
-const double MAX_WEIGHT = 999.99;      // 6 символов
-const int MAX_QUANTITY = 9999;         // 4 символа
-const int MAX_COST_PER_UNIT = 99999;   // 5 символов
-const int MAX_TOTAL_COST = 999999;     // 6 символов
-
-// Структура предмета инвентаря
 #pragma pack(push, 1)
 struct Inventory {
-    char item_name[MAX_LEN];    // Название предмета
-    bool quest;                 // Флаг квестового предмета
-    int cost_per_unit;          // Стоимость за единицу
-    char category[MAX_LEN];     // Категория (может быть пустой)
-    double weight;              // Вес за единицу
-    int quantity;               // Количество
-    int Full_cost() const { return cost_per_unit * quantity; }  // Общая стоимость
+    char item_name[MAX_LEN];
+    bool quest;
+    int cost_per_unit;
+    char category[MAX_LEN];
+    double weight;
+    int quantity;
+    int Full_cost() const { return cost_per_unit * quantity; }
 };
 #pragma pack(pop)
 
-const char* FILENAME = "inventory.bin";       // Основной файл данных
-const char* TMP_FILE = "inventory_tmp.bin";   // Временный файл для операций
-const size_t REC_SIZE = sizeof(Inventory);    // Размер одной записи в байтах
+const char* FILENAME = "inventory.bin";
+const char* TMP_FILE = "inventory_tmp.bin";
+const char* WORK_FILE = "inventory_work.bin";
+const size_t REC_SIZE = sizeof(Inventory);
 
-// ============================================================================
-// ПРОТОТИПЫ ФУНКЦИЙ
-// ============================================================================
-
-// Устанавливает цвет текста консоли
+// Изменяет цвет текста в консоли Windows.
 static void setColor(int color);
-
-// Читает число double с проверкой диапазона
+// Читает число double с проверкой диапазона и повторным запросом при ошибке.
 double ReadNumberInRange(const char* prompt, double minVal, double maxVal, const char* errorMsg);
-
-// Читает целое число int с проверкой диапазона
+// Читает целое число int с проверкой диапазона и повторным запросом при ошибке.
 int ReadIntInRange(const char* prompt, int minVal, int maxVal, const char* errorMsg);
-
-// Читает строку, обязательно требуя непустое значение
+// Читает строку, требуя непустого ввода без пробелов.
 bool ReadRequiredString(const char* prompt, char* buffer, int size);
-
-// Читает строку, разрешая пустое значение
+// Читает строку, разрешая пустой ввод.
 void ReadOptionalString(const char* prompt, char* buffer, int size);
-
-// Читает строку с консоли
+// Безопасно читает строку из стандартного ввода с ограничением размера.
 void ReadLine(char* buffer, int size);
-
-// Проверяет, является ли строка пустой или содержащей только пробелы
+// Проверяет, содержит ли строка только пробелы или табуляции.
 bool IsStringEmpty(const char* str);
-
-// Возвращает количество записей в файле инвентаря
+// Возвращает количество записей в бинарном файле инвентаря.
 int GetRecordCount();
-
-// Читает запись по индексу из бинарного файла
+// Последовательно читает файл до указанной позиции и возвращает запись.
 bool ReadRecordAt(int index, Inventory& out);
-
-// Записывает запись по индексу в бинарный файл
+// Заменяет запись по индексу через полную перезапись файла без seekg.
 bool WriteRecordAt(int index, const Inventory& in);
-
-// Меняет местами две записи в файле по их индексам
+// Меняет местами две записи в файле путём последовательного копирования.
 void SwapRecords(int idx1, int idx2);
-
-// Выводит свойства предмета в виде форматированной таблицы
+// Выводит детали одной записи в виде форматированной рамки.
 void PrintItem(const Inventory& item);
-
-// Выводит все предметы инвентаря в виде таблицы
+// Выводит все записи файла в виде таблицы с заголовками.
 void PrintItemTable();
-
-// Выводит таблицу предметов с выделением выбранного элемента цветом
+// Выводит таблицу с подсветкой выбранной строки цветом.
 void PrintItemTableWithSelection(int selectedIndex);
-
-// Линейный поиск предмета по имени (регистронезависимый)
+// Ищет запись по имени последовательным проходом по файлу.
 int LinearSearchInFile(const char* name);
-
-// Линейный поиск по имени, исключая запись с указанным индексом
-// Используется при редактировании имени (чтобы не находить саму себя)
+// Ищет запись по имени, игнорируя указанный индекс.
 int LinearSearchExcludingIndex(const char* name, int excludeIndex);
-
-// Бинарный поиск по весу
+// Ищет запись по весу последовательным проходом по файлу.
 int BinarySearchInFile_ByWeight(double target);
-
-// Обновляет количество предмета по имени
+// Увеличивает количество найденного предмета с проверкой лимита.
 void UpdateQuantityByName(const char* name, int addQty);
-
-// Добавляет новый предмет в файл
+// Добавляет новый предмет в конец файла после валидации ввода.
 void AddItemToFile();
-
-// Редактирует существующий предмет через таблицу выбора
+// Позволяет изменить поля выбранного предмета через интерактивное меню.
 void EditItem();
-
-// Удаляет предмет после подтверждения через таблицу выбора
+// Удаляет выбранный предмет путём перезаписи файла без удалённой записи.
 void DeleteItem();
-
-// Выводит весь инвентарь в виде таблицы
-// Обёртка над PrintItemTable() с заголовком
+// Выводит всё содержимое файла с заголовком и ожиданием нажатия.
 void PrintAllFromFile();
-
-// Пузырьковая сортировка файла по весу
+// Сортирует файл по весу с помощью потоковой вставки.
 void SortFileByWeight_Bubble();
-
-// Сортировка файла выборкой по количеству
+// Сортирует файл по количеству с помощью потоковой вставки.
 void SortFileByQuantity_Selection();
-
-// Сортировка файла вставками по имени
+// Сортирует файл по имени с помощью потоковой вставки.
 void SortFileByName_Insertion();
-
-// Потоковая сортировка файла по заданному компаратору
+// Универсальная сортировка файла с использованием компаратора и временных файлов.
 void SortFile_Stream(bool (*comesBefore)(const Inventory&, const Inventory&));
-
-// Записывает предмет во временный файл
-// Используется для поиска и фильтрации
+// Добавляет одну запись в конец временного файла.
 void WriteToTmpFile(const Inventory& item);
-
-// Очищает временный файл
+// Очищает временный файл, оставляя его пустым.
 void ClearTmpFile();
-
-// Выводит все предметы из временного файла
+// Выводит все записи из временного файла в детальном формате.
 void PrintTmpFile();
-
-// Выводит все предметы из временного файла в виде таблицы
+// Выводит содержимое временного файла в табличном виде.
 void PrintTmpFileTable();
-
-// Возвращает количество записей во временном файле
+// Возвращает количество записей во временном файле.
 int GetTmpRecordCount();
-
-// Сортирует временный файл по стоимости за единицу (по убыванию)
+// Сортирует временный файл по стоимости за единицу по убыванию.
 void SortTmpFileByCost_Desc();
-
-// Меню выбора фильтра категории для поиска
+// Предоставляет меню выбора фильтра по категории.
 int SelectCategoryForSearch(char* category, int size);
-
-// Поиск по диапазону веса и категории с фильтрацией
-// Результаты сохраняются во временный файл и сортируются
+// Фильтрует предметы по диапазону веса и категории, сортирует результаты.
 void SearchByWeightRangeAndCategory();
-
-// Просмотр инвентаря с группировкой по категориям
-// Включает анализ: самый дорогой и самый тяжёлый набор
+// Группирует инвентарь по категориям и анализирует самые дорогие/тяжёлые наборы.
 void ViewInventoryByCategory();
-
-// Генерирует текстовый отчёт в файл inventory_report.txt
+// Генерирует текстовый отчёт о состоянии инвентаря в файл.
 void GenerateReport();
-
-// Находит наименее выгодный предмет по соотношению цена/вес.(Исключает квестовые предметы)
+// Находит наименее выгодный предмет по соотношению цены к весу.
 void HelpWithOverload();
-
-// Поиск по имени
+// Запрашивает имя и выводит найденный предмет или сообщение об отсутствии.
 void SearchByName();
-
-// Поиск по весу с предварительной сортировкой и подтверждением
+// Сортирует файл по весу и выполняет поиск по заданному значению.
 void SearchByWeight();
-
-// Главное меню программы с навигацией стрелками
+// Отображает главное меню программы с навигацией стрелками.
 int MainMenu();
-
-// Универсальное подменю (используется для Edit, Delete, Category)
-// title - заголовок, options - массив пунктов, optionCount - количество
+// Отображает универсальное подменю с выбором стрелками и подтверждением Enter.
 int SubMenu(const char* title, const char** options, int optionCount);
-
-// Выбор предмета из таблицы с навигацией стрелками
+// Позволяет выбрать запись из таблицы навигацией стрелками.
 int SelectItemFromTable(const char* title);
-
-// ============================================================================
-// MAIN
-// ============================================================================
 
 int main() {
     SetConsoleCP(1251);
@@ -201,10 +141,6 @@ int main() {
         }
     }
 }
-
-// ============================================================================
-// РЕАЛИЗАЦИЯ ФУНКЦИЙ
-// ============================================================================
 
 static void setColor(int color) {
     SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
@@ -287,26 +223,69 @@ int GetRecordCount() {
 }
 
 bool ReadRecordAt(int index, Inventory& out) {
-    std::ifstream file(FILENAME, std::ios::binary);
-    if (!file) return false;
-    file.seekg(index * REC_SIZE);
-    return file.read(reinterpret_cast<char*>(&out), REC_SIZE).good();
+    std::ifstream src(FILENAME, std::ios::binary);
+    if (!src) return false;
+    Inventory temp{};
+    int current = 0;
+    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
+        if (current == index) {
+            out = temp;
+            return true;
+        }
+        ++current;
+    }
+    return false;
 }
 
 bool WriteRecordAt(int index, const Inventory& in) {
-    std::fstream file(FILENAME, std::ios::binary | std::ios::in | std::ios::out);
-    if (!file) return false;
-    file.seekp(index * REC_SIZE);
-    return file.write(reinterpret_cast<const char*>(&in), REC_SIZE).good();
+    std::ifstream src(FILENAME, std::ios::binary);
+    std::ofstream tmp(TMP_FILE, std::ios::binary);
+    if (!src || !tmp) return false;
+    
+    Inventory temp{};
+    int current = 0;
+    bool found = false;
+    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
+        if (current == index) {
+            found = true;
+        } else {
+            tmp.write(reinterpret_cast<const char*>(&temp), REC_SIZE);
+        }
+        ++current;
+    }
+    if (found) {
+        tmp.write(reinterpret_cast<const char*>(&in), REC_SIZE);
+    }
+    src.close(); tmp.close();
+    remove(FILENAME);
+    rename(TMP_FILE, FILENAME);
+    return found;
 }
 
 void SwapRecords(int idx1, int idx2) {
     if (idx1 == idx2) return;
     Inventory a{}, b{};
-    ReadRecordAt(idx1, a);
-    ReadRecordAt(idx2, b);
-    WriteRecordAt(idx1, b);
-    WriteRecordAt(idx2, a);
+    if (!ReadRecordAt(idx1, a) || !ReadRecordAt(idx2, b)) return;
+    
+    std::ifstream src(FILENAME, std::ios::binary);
+    std::ofstream tmp(TMP_FILE, std::ios::binary);
+    if (!src || !tmp) return;
+    
+    Inventory temp{};
+    int index = 0;
+    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
+        if (index == idx1) {
+            tmp.write(reinterpret_cast<const char*>(&b), REC_SIZE);
+        } else if (index == idx2) {
+            tmp.write(reinterpret_cast<const char*>(&a), REC_SIZE);
+        } else {
+            tmp.write(reinterpret_cast<const char*>(&temp), REC_SIZE);
+        }
+        ++index;
+    }
+    src.close(); tmp.close();
+    remove(FILENAME);
+    rename(TMP_FILE, FILENAME);
 }
 
 void PrintItem(const Inventory& item) {
@@ -350,30 +329,33 @@ void PrintItemTable() {
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
     std::cout << "| #  | Name                       | Category   | Quest    | Weight | Qty  | Total  |\n";
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+    
+    std::ifstream src(FILENAME, std::ios::binary);
     Inventory item{};
-    for (int i = 0; i < n; ++i) {
-        if (ReadRecordAt(i, item)) {
-            char nameDisplay[25];
-            char catDisplay[11];
-            strncpy_s(nameDisplay, item.item_name, 24);
-            nameDisplay[24] = '\0';
-            if (IsStringEmpty(item.category))
-                strcpy_s(catDisplay, "(none)");
-            else {
-                strncpy_s(catDisplay, item.category, 10);
-                catDisplay[10] = '\0';
-            }
-            char weightStr[8];
-            snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
-            std::cout << "| " << std::setw(2) << i << " | " 
-                      << std::left << std::setw(26) << nameDisplay << " | "
-                      << std::left << std::setw(10) << catDisplay << " | "
-                      << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
-                      << std::setw(6) << weightStr << " | "
-                      << std::setw(4) << item.quantity << " | "
-                      << std::setw(6) << item.Full_cost() << " |\n";
+    int i = 0;
+    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
+        char nameDisplay[25];
+        char catDisplay[11];
+        strncpy_s(nameDisplay, item.item_name, 24);
+        nameDisplay[24] = '\0';
+        if (IsStringEmpty(item.category))
+            strcpy_s(catDisplay, "(none)");
+        else {
+            strncpy_s(catDisplay, item.category, 10);
+            catDisplay[10] = '\0';
         }
+        char weightStr[8];
+        snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
+        std::cout << "| " << std::setw(2) << i << " | " 
+                  << std::left << std::setw(26) << nameDisplay << " | "
+                  << std::left << std::setw(10) << catDisplay << " | "
+                  << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
+                  << std::setw(6) << weightStr << " | "
+                  << std::setw(4) << item.quantity << " | "
+                  << std::setw(6) << item.Full_cost() << " |\n";
+        i++;
     }
+    src.close();
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
     std::cout << "Total items: " << n << "\n\n";
 }
@@ -388,42 +370,45 @@ void PrintItemTableWithSelection(int selectedIndex) {
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
     std::cout << "| #  | Name                       | Category   | Quest    | Weight | Qty  | Total  |\n";
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
+    
+    std::ifstream src(FILENAME, std::ios::binary);
     Inventory item{};
-    for (int i = 0; i < n; ++i) {
-        if (ReadRecordAt(i, item)) {
-            char nameDisplay[25];
-            char catDisplay[11];
-            strncpy_s(nameDisplay, item.item_name, 24);
-            nameDisplay[24] = '\0';
-            if (IsStringEmpty(item.category))
-                strcpy_s(catDisplay, "(none)");
-            else {
-                strncpy_s(catDisplay, item.category, 10);
-                catDisplay[10] = '\0';
-            }
-            char weightStr[8];
-            snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
-            if (i == selectedIndex) {
-                setColor(14);
-                std::cout << "| " << std::setw(2) << i << " | " 
-                          << std::left << std::setw(26) << nameDisplay << " | "
-                          << std::left << std::setw(10) << catDisplay << " | "
-                          << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
-                          << std::setw(6) << weightStr << " | "
-                          << std::setw(4) << item.quantity << " | "
-                          << std::setw(6) << item.Full_cost() << " |\n";
-                setColor(7);
-            }
-            else
-                std::cout << "| " << std::setw(2) << i << " | " 
-                          << std::left << std::setw(26) << nameDisplay << " | "
-                          << std::left << std::setw(10) << catDisplay << " | "
-                          << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
-                          << std::setw(6) << weightStr << " | "
-                          << std::setw(4) << item.quantity << " | "
-                          << std::setw(6) << item.Full_cost() << " |\n";
+    int i = 0;
+    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
+        char nameDisplay[25];
+        char catDisplay[11];
+        strncpy_s(nameDisplay, item.item_name, 24);
+        nameDisplay[24] = '\0';
+        if (IsStringEmpty(item.category))
+            strcpy_s(catDisplay, "(none)");
+        else {
+            strncpy_s(catDisplay, item.category, 10);
+            catDisplay[10] = '\0';
         }
+        char weightStr[8];
+        snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
+        if (i == selectedIndex) {
+            setColor(14);
+            std::cout << "| " << std::setw(2) << i << " | " 
+                      << std::left << std::setw(26) << nameDisplay << " | "
+                      << std::left << std::setw(10) << catDisplay << " | "
+                      << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
+                      << std::setw(6) << weightStr << " | "
+                      << std::setw(4) << item.quantity << " | "
+                      << std::setw(6) << item.Full_cost() << " |\n";
+            setColor(7);
+        }
+        else
+            std::cout << "| " << std::setw(2) << i << " | " 
+                      << std::left << std::setw(26) << nameDisplay << " | "
+                      << std::left << std::setw(10) << catDisplay << " | "
+                      << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
+                      << std::setw(6) << weightStr << " | "
+                      << std::setw(4) << item.quantity << " | "
+                      << std::setw(6) << item.Full_cost() << " |\n";
+        i++;
     }
+    src.close();
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
     std::cout << "Total items: " << n << " | Use UP/DOWN arrows to select, ENTER to confirm\n\n";
 }
@@ -440,16 +425,16 @@ int SelectItemFromTable(const char* title) {
         int key = _getch();
         if (key == 224 || key == 0) {
             key = _getch();
-            if (key == 72) // Up arrow
+            if (key == 72)
                 selectedIndex = (selectedIndex - 1 + n) % n;
-            else if (key == 80) // Down arrow
+            else if (key == 80)
                 selectedIndex = (selectedIndex + 1) % n;
         }
-        else if (key == 13) {  // Enter
+        else if (key == 13) {
             system("cls");
             return selectedIndex;
         }
-        else if (key == 27) {  // Escape
+        else if (key == 27) {
             system("cls");
             return -1;
         }
@@ -613,17 +598,14 @@ int LinearSearchExcludingIndex(const char* name, int excludeIndex) {
 int BinarySearchInFile_ByWeight(double target) {
     int n = GetRecordCount();
     if (n == 0) return -1;
-    int left = 0, right = n - 1;
+    
+    std::ifstream src(FILENAME, std::ios::binary);
     Inventory temp{};
-    while (left <= right) {
-        int mid = (left + right) / 2;
-        if (!ReadRecordAt(mid, temp)) break;
+    int index = 0;
+    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
         if (std::abs(temp.weight - target) < 0.001)
-            return mid;
-        else if (temp.weight < target)
-            left = mid + 1;
-        else
-            right = mid - 1;
+            return index;
+        ++index;
     }
     return -1;
 }
@@ -672,8 +654,8 @@ void AddItemToFile() {
     while (true) {
         std::cout << "Quest item? (quest/not): ";
         ReadLine(buff, MAX_LEN);
-        if (_stricmp(buff, "quest") == 0) item.quest = true; break;
-        if (_stricmp(buff, "not") == 0) item.quest = false; break;
+        if (_stricmp(buff, "quest") == 0) { item.quest = true; break; }
+        if (_stricmp(buff, "not") == 0) { item.quest = false; break; }
         std::cout << "Please enter 'quest' or 'not'\n";
     }
     system("cls");
@@ -866,7 +848,7 @@ void SortFileByWeight_Bubble() {
         system("pause"); 
         return; 
     }
-    SortFile_Stream([](const Inventory& a, const Inventory& b) {
+    SortFile_Stream([](const Inventory& a, const Inventory& b) -> bool {
         return a.weight < b.weight;
     });
     std::cout << "Sorted by weight!\n";
@@ -924,7 +906,7 @@ void SortFileByQuantity_Selection() {
         system("pause"); 
         return; 
     }
-    SortFile_Stream([](const Inventory& a, const Inventory& b) {
+    SortFile_Stream([](const Inventory& a, const Inventory& b) -> bool {
         return a.quantity < b.quantity;
     });
     std::cout << "Sorted by quantity (selection)!\n";
@@ -939,7 +921,7 @@ void SortFileByName_Insertion() {
         system("pause"); 
         return; 
     }
-    SortFile_Stream([](const Inventory& a, const Inventory& b) {
+    SortFile_Stream([](const Inventory& a, const Inventory& b) -> bool {
         return _stricmp(a.item_name, b.item_name) < 0;
     });
     std::cout << "Sorted by name (insertion)!\n";
@@ -949,7 +931,6 @@ void SortFileByName_Insertion() {
 
 void SortFile_Stream(bool (*comesBefore)(const Inventory&, const Inventory&)) {
     const char* SORTED_FILE = TMP_FILE;
-    const char* WORK_FILE = "inventory_work.bin";
 
     std::ifstream src(FILENAME, std::ios::binary);
     if (!src) return;
@@ -1052,22 +1033,63 @@ int GetTmpRecordCount() {
 void SortTmpFileByCost_Desc() {
     int n = GetTmpRecordCount();
     if (n <= 1) return;
-    for (int i = 0; i < n - 1; ++i)
-        for (int j = 0; j < n - i - 1; ++j) {
-            Inventory a{}, b{};
-            std::ifstream tmp(TMP_FILE, std::ios::binary);
-            tmp.seekg(j * REC_SIZE);
-            tmp.read(reinterpret_cast<char*>(&a), REC_SIZE);
-            tmp.read(reinterpret_cast<char*>(&b), REC_SIZE);
-            tmp.close();
-            if (a.cost_per_unit < b.cost_per_unit) {
-                std::fstream tmp(TMP_FILE, std::ios::binary | std::ios::in | std::ios::out);
-                tmp.seekp(j * REC_SIZE);
-                tmp.write(reinterpret_cast<char*>(&b), REC_SIZE);
-                tmp.write(reinterpret_cast<char*>(&a), REC_SIZE);
-                tmp.close();
+    
+    for (int i = 0; i < n - 1; ++i) {
+        Inventory maxRec{};
+        int maxIdx = -1;
+        
+        std::ifstream tmp(TMP_FILE, std::ios::binary);
+        Inventory item{};
+        int idx = 0;
+        bool found = false;
+        
+        while (tmp.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
+            bool alreadyPlaced = false;
+            std::ifstream placed(TMP_FILE, std::ios::binary);
+            Inventory p{};
+            int pIdx = 0;
+            while (placed.read(reinterpret_cast<char*>(&p), REC_SIZE) && pIdx < i) {
+                if (memcmp(&p, &item, REC_SIZE) == 0) {
+                    alreadyPlaced = true;
+                    break;
+                }
+                ++pIdx;
             }
+            placed.close();
+            
+            if (!alreadyPlaced) {
+                if (!found || item.cost_per_unit > maxRec.cost_per_unit) {
+                    maxRec = item;
+                    maxIdx = idx;
+                    found = true;
+                }
+            }
+            ++idx;
         }
+        tmp.close();
+        
+        if (found && maxIdx >= i) {
+            std::ifstream src(TMP_FILE, std::ios::binary);
+            std::ofstream out(WORK_FILE, std::ios::binary);
+            Inventory temp{};
+            int cur = 0;
+            while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
+                if (cur < i) {
+                    out.write(reinterpret_cast<const char*>(&temp), REC_SIZE);
+                }
+                else if (cur == i) {
+                    out.write(reinterpret_cast<const char*>(&maxRec), REC_SIZE);
+                }
+                else if (cur != maxIdx) {
+                    out.write(reinterpret_cast<const char*>(&temp), REC_SIZE);
+                }
+                ++cur;
+            }
+            src.close(); out.close();
+            remove(TMP_FILE);
+            rename(WORK_FILE, TMP_FILE);
+        }
+    }
 }
 
 void SearchByWeightRangeAndCategory() {
@@ -1077,23 +1099,26 @@ void SearchByWeightRangeAndCategory() {
     if (low > high) std::swap(low, high);
     char category[MAX_LEN];
     int filterType = SelectCategoryForSearch(category, MAX_LEN);
-    int n = GetRecordCount();
+    
+    std::ifstream src(FILENAME, std::ios::binary);
     Inventory item{};
     int matches = 0;
-    for (int i = 0; i < n; ++i)
-        if (ReadRecordAt(i, item)) {
-            bool categoryMatch = false;
-            if (filterType == 2)
-                categoryMatch = true;
-            else if (filterType == 0)
-                categoryMatch = IsStringEmpty(item.category);
-            else
-                categoryMatch = (_stricmp(item.category, category) == 0);
-            if (categoryMatch && item.weight >= low && item.weight <= high) {
-                WriteToTmpFile(item);
-                matches++;
-            }
+    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
+        bool categoryMatch = false;
+        if (filterType == 2)
+            categoryMatch = true;
+        else if (filterType == 0)
+            categoryMatch = IsStringEmpty(item.category);
+        else
+            categoryMatch = (_stricmp(item.category, category) == 0);
+        
+        if (categoryMatch && item.weight >= low && item.weight <= high) {
+            WriteToTmpFile(item);
+            matches++;
         }
+    }
+    src.close();
+    
     if (matches == 0) {
         std::cout << "No items found.\n";
         system("pause");
@@ -1121,6 +1146,7 @@ void ViewInventoryByCategory() {
         system("pause");
         return;
     }
+    
     ClearTmpFile();
     std::ifstream src(FILENAME, std::ios::binary);
     std::ofstream tmp(TMP_FILE, std::ios::binary);
@@ -1128,20 +1154,23 @@ void ViewInventoryByCategory() {
     while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) 
         tmp.write(reinterpret_cast<char*>(&item), REC_SIZE);
     src.close(); tmp.close();
+    
     int tmpN = GetTmpRecordCount();
     for (int i = 1; i < tmpN; ++i) {
         Inventory key{};
-        std::ifstream tIn(TMP_FILE, std::ios::binary);
-        tIn.seekg(i * REC_SIZE);
-        tIn.read(reinterpret_cast<char*>(&key), REC_SIZE);
-        tIn.close();
+        {
+            std::ifstream tIn(TMP_FILE, std::ios::binary);
+            tIn.seekg(i * REC_SIZE);
+            tIn.read(reinterpret_cast<char*>(&key), REC_SIZE);
+        }
         int j = i - 1;
         while (j >= 0) {
             Inventory curr{};
-            std::ifstream tIn2(TMP_FILE, std::ios::binary);
-            tIn2.seekg(j * REC_SIZE);
-            tIn2.read(reinterpret_cast<char*>(&curr), REC_SIZE);
-            tIn2.close();
+            {
+                std::ifstream tIn2(TMP_FILE, std::ios::binary);
+                tIn2.seekg(j * REC_SIZE);
+                tIn2.read(reinterpret_cast<char*>(&curr), REC_SIZE);
+            }
             int catCmp = _stricmp(curr.category, key.category);
             int nameCmp = (catCmp == 0) ? _stricmp(curr.item_name, key.item_name) : catCmp;
             if (nameCmp > 0) {
@@ -1158,6 +1187,7 @@ void ViewInventoryByCategory() {
         tOut.write(reinterpret_cast<char*>(&key), REC_SIZE);
         tOut.close();
     }
+    
     std::cout << "\n=== INVENTORY BY CATEGORY ===\n";
     char currentCat[MAX_LEN] = "";
     bool firstItem = true;
@@ -1166,7 +1196,8 @@ void ViewInventoryByCategory() {
     while (tView.read(reinterpret_cast<char*>(&viewItem), REC_SIZE)) {
         bool currentEmpty = IsStringEmpty(currentCat);
         bool viewEmpty = IsStringEmpty(viewItem.category);
-        bool categoryChanged = (currentEmpty != viewEmpty) || (!currentEmpty && !viewEmpty && _stricmp(currentCat, viewItem.category) != 0);
+        bool categoryChanged = (currentEmpty != viewEmpty) || 
+                              (!currentEmpty && !viewEmpty && _stricmp(currentCat, viewItem.category) != 0);
         if (categoryChanged || firstItem) {
             strcpy_s(currentCat, viewItem.category);
             if (viewEmpty)
@@ -1175,9 +1206,11 @@ void ViewInventoryByCategory() {
                 std::cout << "\n>>> Category: " << currentCat << " <<<\n";
             firstItem = false;
         }
-        std::cout << " - " << viewItem.item_name << " (x" << viewItem.quantity << ", " << std::fixed << std::setprecision(2) << viewItem.weight << "kg)\n";
+        std::cout << " - " << viewItem.item_name << " (x" << viewItem.quantity 
+                  << ", " << std::fixed << std::setprecision(2) << viewItem.weight << "kg)\n";
     }
     tView.close();
+    
     int maxCostIdx = -1, maxWeightIdx = -1;
     double maxTotalCost = -1, maxTotalWeight = -1;
     for (int i = 0; i < n; ++i) {
@@ -1218,19 +1251,24 @@ void GenerateReport() {
     }
     txt << "===== INVENTORY REPORT =====\n";
     txt << "Generated: " << __DATE__ << " " << __TIME__ << "\n\n";
+    
     Inventory item{};
     int totalItems = 0, totalWeight = 0, totalCost = 0;
-    for (int i = 0; i < n; ++i)
-        if (ReadRecordAt(i, item)) {
-            txt << "Item: " << item.item_name << "\n";
-            txt << " Category: " << (IsStringEmpty(item.category) ? "(none)" : item.category) << "\n";
-            txt << " Quest: " << (item.quest ? "Yes" : "No") << "\n";
-            txt << " Cost/unit: " << item.cost_per_unit << " | Qty: " << item.quantity << " | Total: " << item.Full_cost() << "\n";
-            txt << " Weight/unit: " << std::fixed << std::setprecision(2) << item.weight << " | Total weight: " << (item.weight * item.quantity) << "\n\n";
-            totalItems += item.quantity;
-            totalWeight += static_cast<int>(item.weight * item.quantity);
-            totalCost += item.Full_cost();
-        }
+    std::ifstream src(FILENAME, std::ios::binary);
+    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
+        txt << "Item: " << item.item_name << "\n";
+        txt << " Category: " << (IsStringEmpty(item.category) ? "(none)" : item.category) << "\n";
+        txt << " Quest: " << (item.quest ? "Yes" : "No") << "\n";
+        txt << " Cost/unit: " << item.cost_per_unit << " | Qty: " << item.quantity 
+            << " | Total: " << item.Full_cost() << "\n";
+        txt << " Weight/unit: " << std::fixed << std::setprecision(2) << item.weight 
+            << " | Total weight: " << (item.weight * item.quantity) << "\n\n";
+        totalItems += item.quantity;
+        totalWeight += static_cast<int>(item.weight * item.quantity);
+        totalCost += item.Full_cost();
+    }
+    src.close();
+    
     txt << "===== SUMMARY =====\n";
     txt << "Total unique items: " << n << "\n";
     txt << "Total quantity: " << totalItems << "\n";
@@ -1250,21 +1288,29 @@ void HelpWithOverload() {
     }
     int worstIdx = -1;
     double worstRatio = 1e9;
+    
+    std::ifstream src(FILENAME, std::ios::binary);
     Inventory item{};
-    for (int i = 0; i < n; ++i)
-        if (ReadRecordAt(i, item) && !item.quest && item.weight > 0.001) {
+    int index = 0;
+    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
+        if (!item.quest && item.weight > 0.001) {
             double ratio = static_cast<double>(item.cost_per_unit) / item.weight;
             if (ratio < worstRatio) {
                 worstRatio = ratio;
-                worstIdx = i;
+                worstIdx = index;
             }
         }
+        ++index;
+    }
+    src.close();
+    
     if (worstIdx == -1)
         std::cout << "No suitable non-quest items found.\n";
     else {
-        ReadRecordAt(worstIdx, item);
+        Inventory worstItem{};
+        ReadRecordAt(worstIdx, worstItem);
         std::cout << "\n=== LEAST COST-EFFECTIVE ITEM (NON-QUEST) ===\n";
-        PrintItem(item);
+        PrintItem(worstItem);
         std::cout << "Cost/Weight ratio: " << worstRatio << " gold/kg\n";
         std::cout << "Consider dropping this item first!\n";
     }
