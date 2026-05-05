@@ -70,7 +70,7 @@ void PrintItemTableWithSelection(int selectedIndex);
 int LinearSearchInFile(const char* name);
 // Ищет запись по имени, игнорируя указанный индекс.
 int LinearSearchExcludingIndex(const char* name, int excludeIndex);
-// Ищет запись по весу последовательным проходом по файлу.
+// Ищет запись по весу бинарным поиском.
 int BinarySearchInFile_ByWeight(double target);
 // Увеличивает количество найденного предмета с проверкой лимита.
 void UpdateQuantityByName(const char* name, int addQty);
@@ -590,16 +590,29 @@ int LinearSearchExcludingIndex(const char* name, int excludeIndex) {
 
 int BinarySearchInFile_ByWeight(double target) {
     int n = GetRecordCount();
-    if (n == 0) return -1;
-    
-    std::ifstream src(FILENAME, std::ios::binary);
+    if (n == 0) 
+        return -1;
+    int low = 0, high = n - 1;
     Inventory temp{};
-    int index = 0;
-    while (src.read(reinterpret_cast<char*>(&temp), REC_SIZE)) {
-        if (std::abs(temp.weight - target) < 0.001)
-            return index;
-        ++index;
+    std::ifstream src(FILENAME, std::ios::binary);
+    if (!src) 
+        return -1;
+    while (low <= high) {
+        int mid = low + (high - low) / 2;
+        src.seekg(mid * REC_SIZE, std::ios::beg);
+        src.read(reinterpret_cast<char*>(&temp), REC_SIZE);
+        if (!src) 
+            break;
+        if (std::abs(temp.weight - target) < 0.001) {
+            src.close();
+            return mid;
+        }
+        else if (temp.weight < target)
+            low = mid + 1;
+        else
+            high = mid - 1;
     }
+    src.close();
     return -1;
 }
 
