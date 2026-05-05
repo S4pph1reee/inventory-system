@@ -1,3 +1,4 @@
+#define NOMINMAX
 #include <iostream>
 #include <fstream>
 #include <windows.h>
@@ -16,7 +17,6 @@ const int MAX_QUANTITY = 9999;
 const int MAX_COST_PER_UNIT = 99999;
 const int MAX_TOTAL_COST = 999999;
 
-#pragma pack(push, 1)
 struct Inventory {
     char item_name[MAX_LEN];
     bool quest;
@@ -33,8 +33,13 @@ const char* TMP_FILE = "inventory_tmp.bin";
 const char* WORK_FILE = "inventory_work.bin";
 const size_t REC_SIZE = sizeof(Inventory);
 
+// ==================== ПРОТОТИПЫ ФУНКЦИЙ ====================
 // Изменяет цвет текста в консоли Windows.
 static void setColor(int color);
+// Очищает буфер стандартного ввода до символа новой строки.
+inline void FlushInput();
+// Полностью сбрасывает состояние std::cin после ошибки ввода.
+inline void ResetCin();
 // Читает число double с проверкой диапазона и повторным запросом при ошибке.
 double ReadNumberInRange(const char* prompt, double minVal, double maxVal, const char* errorMsg);
 // Читает целое число int с проверкой диапазона и повторным запросом при ошибке.
@@ -118,32 +123,14 @@ int SubMenu(const char* title, const char** options, int optionCount);
 // Позволяет выбрать запись из таблицы навигацией стрелками.
 int SelectItemFromTable(const char* title);
 
-int main() {
-    SetConsoleCP(1251);
-    SetConsoleOutputCP(1251);
-    while (true) {
-        int choice = MainMenu();
-        switch (choice) {
-            case 0: AddItemToFile(); break;
-            case 1: PrintAllFromFile(); break;
-            case 2: EditItem(); break;
-            case 3: DeleteItem(); break;
-            case 4: SearchByName(); break;
-            case 5: SearchByWeight(); break;
-            case 6: SortFileByWeight_Bubble(); break;
-            case 7: SortFileByQuantity_Selection(); break;
-            case 8: SortFileByName_Insertion(); break;
-            case 9: SearchByWeightRangeAndCategory(); break;
-            case 10: ViewInventoryByCategory(); break;
-            case 11: GenerateReport(); break;
-            case 12: HelpWithOverload(); break;
-            case 13: return 0;
-        }
-    }
+// ==================== УТИЛИТЫ ВВОДА ====================
+inline void FlushInput() {
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-static void setColor(int color) {
-    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
+inline void ResetCin() {
+    std::cin.clear();
+    FlushInput();
 }
 
 double ReadNumberInRange(const char* prompt, double minVal, double maxVal, const char* errorMsg) {
@@ -154,16 +141,15 @@ double ReadNumberInRange(const char* prompt, double minVal, double maxVal, const
             if (temp < minVal || temp > maxVal) {
                 std::cout << errorMsg;
                 std::cout << "Allowed range: " << minVal << " to " << maxVal << "\n";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                FlushInput();
                 continue;
             }
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            FlushInput();
             return temp;
         }
         else {
             std::cout << "Invalid value. Try again\n";
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            ResetCin();
         }
     }
 }
@@ -176,16 +162,15 @@ int ReadIntInRange(const char* prompt, int minVal, int maxVal, const char* error
             if (temp < minVal || temp > maxVal) {
                 std::cout << errorMsg;
                 std::cout << "Allowed range: " << minVal << " to " << maxVal << "\n";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                FlushInput();
                 continue;
             }
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            FlushInput();
             return temp;
         }
         else {
             std::cout << "Invalid value. Try again\n";
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            ResetCin();
         }
     }
 }
@@ -216,6 +201,11 @@ bool IsStringEmpty(const char* str) {
     return true;
 }
 
+static void setColor(int color) {
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), color);
+}
+
+// ==================== ФАЙЛОВЫЕ ОПЕРАЦИИ ====================
 int GetRecordCount() {
     std::ifstream file(FILENAME, std::ios::binary | std::ios::ate);
     if (!file) return 0;
@@ -288,6 +278,7 @@ void SwapRecords(int idx1, int idx2) {
     rename(TMP_FILE, FILENAME);
 }
 
+// ==================== ВЫВОД ====================
 void PrintItem(const Inventory& item) {
     std::cout << "\n";
     std::cout << "+------------------------------------------+\n";
@@ -413,6 +404,7 @@ void PrintItemTableWithSelection(int selectedIndex) {
     std::cout << "Total items: " << n << " | Use UP/DOWN arrows to select, ENTER to confirm\n\n";
 }
 
+// ==================== НАВИГАЦИЯ И МЕНЮ ====================
 int SelectItemFromTable(const char* title) {
     int n = GetRecordCount();
     if (n == 0) return -1;
@@ -563,6 +555,7 @@ int SelectCategoryForSearch(char* category, int size) {
     }
 }
 
+// ==================== ПОИСК И СОРТИРОВКА ====================
 int LinearSearchInFile(const char* name) {
     std::ifstream src(FILENAME, std::ios::binary);
     if (!src) return -1;
@@ -1315,4 +1308,28 @@ void HelpWithOverload() {
         std::cout << "Consider dropping this item first!\n";
     }
     system("pause");
+}
+
+int main() {
+    SetConsoleCP(1251);
+    SetConsoleOutputCP(1251);
+    while (true) {
+        int choice = MainMenu();
+        switch (choice) {
+            case 0: AddItemToFile(); break;
+            case 1: PrintAllFromFile(); break;
+            case 2: EditItem(); break;
+            case 3: DeleteItem(); break;
+            case 4: SearchByName(); break;
+            case 5: SearchByWeight(); break;
+            case 6: SortFileByWeight_Bubble(); break;
+            case 7: SortFileByQuantity_Selection(); break;
+            case 8: SortFileByName_Insertion(); break;
+            case 9: SearchByWeightRangeAndCategory(); break;
+            case 10: ViewInventoryByCategory(); break;
+            case 11: GenerateReport(); break;
+            case 12: HelpWithOverload(); break;
+            case 13: return 0;
+        }
+    }
 }
