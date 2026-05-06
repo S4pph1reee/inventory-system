@@ -115,7 +115,7 @@ int SubMenu(const char* title, const char** options, int optionCount);
 // Позволяет выбрать запись из таблицы навигацией стрелками.
 int SelectItemFromTable(const char* title);
 // Универсальная навигация по списку опций с помощью стрелок.
-int NavigateList(const char** options, int count);
+int NavigateList(const char* title, const char** options, int count);
 
 // ==================== MAIN ====================
 int main() {
@@ -123,6 +123,7 @@ int main() {
     SetConsoleOutputCP(1251);
     while (true) {
         int choice = MainMenu();
+        if (choice == 13) return 0;
         switch (choice) {
             case 0: AddItemToFile(); break;
             case 1: PrintAllFromFile(); break;
@@ -137,8 +138,8 @@ int main() {
             case 10: ViewInventoryByCategory(); break;
             case 11: GenerateReport(); break;
             case 12: HelpWithOverload(); break;
-            case 13: return 0;
         }
+        system("cls");
     }
 }
 
@@ -389,9 +390,14 @@ void PrintItemTable(const char* filename, int selectedIndex) {
 }
 
 // ==================== НАВИГАЦИЯ И МЕНЮ ====================
-int NavigateList(const char** options, int count) {
+int NavigateList(const char* title, const char** options, int count) {
     int choice = 0;
     while (true) {
+        system("cls");
+        if (title) {
+            std::cout << "=== " << title << " ===\n";
+            std::cout << "Records in file: " << GetRecordCount() << "\n\n";
+        }
         for (int i = 0; i < count; i++) {
             if (i == choice) {
                 setColor(14);
@@ -410,6 +416,7 @@ int NavigateList(const char** options, int count) {
                 choice = (choice + 1) % count;
         }
         else if (key == 13) {
+            system("cls");
             return choice;
         }
     }
@@ -461,26 +468,11 @@ int MainMenu() {
         "Help With Overload",
         "Exit"
     };
-    int choice = 0;
-    while (true) {
-        system("cls");
-        std::cout << "=== INVENTORY MANAGER ===\n";
-        std::cout << "Records in file: " << GetRecordCount() << "\n\n";
-        choice = NavigateList(menu, MENU_SIZE);
-        system("cls");
-        return choice;
-    }
+    return NavigateList("INVENTORY MANAGER", menu, MENU_SIZE);
 }
 
 int SubMenu(const char* title, const char** options, int optionCount) {
-    while (true) {
-        system("cls");
-        std::cout << "=== " << title << " ===\n";
-        std::cout << "Records in file: " << GetRecordCount() << "\n\n";
-        int choice = NavigateList(options, optionCount);
-        system("cls");
-        return choice;
-    }
+    return NavigateList(title, options, optionCount);
 }
 
 int SelectCategoryForSearch(char* category, int size) {
@@ -490,27 +482,27 @@ int SelectCategoryForSearch(char* category, int size) {
         "Search items WITHOUT category (empty)",
         "Search ALL items (no filter)"
     };
-    int choice = 0;
     while (true) {
-        system("cls");
-        std::cout << "=== CATEGORY FILTER ===\n\n";
-        choice = NavigateList(catMenu, CAT_MENU_SIZE);
-        system("cls");
+        int choice = NavigateList("CATEGORY FILTER", catMenu, CAT_MENU_SIZE);
         if (choice == 0) {
             std::cout << "Enter category name: ";
             ReadLine(category, size);
             if (IsStringEmpty(category)) {
                 memset(category, 0, size);
+                system("cls");
                 return 0;
             }
+            system("cls");
             return 1; 
         }
         else if (choice == 1) {
             memset(category, 0, size);
+            system("cls");
             return 0; 
         }
         else {
             memset(category, 0, size);
+            system("cls");
             return 2;
         }
     }
@@ -677,12 +669,14 @@ void EditItem() {
     if (n == 0) {
         std::cout << "Inventory is empty. Nothing to edit.\n";
         system("pause");
+        system("cls");
         return;
     }
     int pos = SelectItemFromTable("SELECT ITEM TO EDIT");
     if (pos == -1) {
         std::cout << "Edit cancelled.\n";
         system("pause");
+        system("cls");
         return;
     }
     Inventory item{};
@@ -746,6 +740,7 @@ void EditItem() {
         case 6:
             std::cout << "Cancelled.\n";
             system("pause");
+            system("cls");
             return;
     }
     if (modified) {
@@ -755,6 +750,7 @@ void EditItem() {
             std::cout << "Note: Item name was changed. Sort order may have changed.\n";
     }
     system("pause");
+    system("cls");
 }
 
 void DeleteItem() {
@@ -762,12 +758,14 @@ void DeleteItem() {
     if (n == 0) {
         std::cout << "Inventory is empty. Nothing to delete.\n";
         system("pause");
+        system("cls");
         return;
     }
     int pos = SelectItemFromTable("SELECT ITEM TO DELETE");
     if (pos == -1) {
         std::cout << "Delete cancelled.\n";
         system("pause");
+        system("cls");
         return;
     }
     Inventory item{};
@@ -781,6 +779,7 @@ void DeleteItem() {
     if (confirm != 'y' && confirm != 'Y') {
         std::cout << "Delete cancelled.\n";
         system("pause");
+        system("cls");
         return;
     }
     std::ifstream src(FILENAME, std::ios::binary);
@@ -797,6 +796,7 @@ void DeleteItem() {
     rename(TMP_FILE, FILENAME);
     std::cout << "Item deleted!\n";
     system("pause");
+    system("cls");
 }
 
 void PrintAllFromFile() {
@@ -804,11 +804,13 @@ void PrintAllFromFile() {
     if (n == 0) {
         std::cout << "Inventory is empty.\n";
         system("pause");
+        system("cls");
         return;
     }
     std::cout << "\n=== INVENTORY ===\n";
     PrintItemTable();
     system("pause");
+    system("cls");
 }
 
 void SortFileByWeight_Bubble() {
@@ -816,6 +818,7 @@ void SortFileByWeight_Bubble() {
     if (n <= 1) { 
         std::cout << "Nothing to sort.\n"; 
         system("pause"); 
+        system("cls");
         return; 
     }
     for (int i = 0; i < n - 1; ++i) {
@@ -833,6 +836,7 @@ void SortFileByWeight_Bubble() {
     }
     std::cout << "Sorted by weight!\n";
     system("pause");
+    system("cls");
 }
 
 void SearchByName() {
@@ -847,6 +851,7 @@ void SearchByName() {
         PrintItem(item);
     }
     system("pause");
+    system("cls");
 }
 
 void SearchByWeight() {
@@ -861,6 +866,7 @@ void SearchByWeight() {
     if (confirm != 'y' && confirm != 'Y') {
         std::cout << "Operation cancelled by user.\n";
         system("pause");
+        system("cls");
         return;
     }
     SortFileByWeight_Bubble();
@@ -877,6 +883,7 @@ void SearchByWeight() {
         PrintItem(item);
     }
     system("pause");
+    system("cls");
 }
 
 void SortFileByQuantity_Selection() {
@@ -884,6 +891,7 @@ void SortFileByQuantity_Selection() {
     if (n <= 1) { 
         std::cout << "Nothing to sort.\n"; 
         system("pause"); 
+        system("cls");
         return; 
     }
     for (int i = 0; i < n - 1; ++i) {
@@ -907,6 +915,7 @@ void SortFileByQuantity_Selection() {
     std::cout << "Sorted by quantity (selection)!\n";
     PrintItemTable();
     system("pause");
+    system("cls");
 }
 
 void SortFileByName_Insertion() {
@@ -914,6 +923,7 @@ void SortFileByName_Insertion() {
     if (n <= 1) { 
         std::cout << "Nothing to sort.\n"; 
         system("pause"); 
+        system("cls");
         return; 
     }
     for (int i = 1; i < n; ++i) {
@@ -938,6 +948,7 @@ void SortFileByName_Insertion() {
     std::cout << "Sorted by name (insertion)!\n";
     PrintItemTable();
     system("pause");
+    system("cls");
 }
 
 void WriteToTmpFile(const Inventory& item) {
@@ -1039,6 +1050,7 @@ void SearchByWeightRangeAndCategory() {
     if (matches == 0) {
         std::cout << "No items found.\n";
         system("pause");
+        system("cls");
         return;
     }
     SortTmpFileByCost_Desc();
@@ -1054,6 +1066,7 @@ void SearchByWeightRangeAndCategory() {
     PrintItemTable(TMP_FILE);
     remove(TMP_FILE);
     system("pause");
+    system("cls");
 }
 
 void ViewInventoryByCategory() {
@@ -1061,6 +1074,7 @@ void ViewInventoryByCategory() {
     if (n == 0) {
         std::cout << "Inventory is empty.\n";
         system("pause");
+        system("cls");
         return;
     }
     ClearTmpFile();
@@ -1146,6 +1160,7 @@ void ViewInventoryByCategory() {
         std::cout << "Heaviest set: " << item.item_name << " | Total: " << maxTotalWeight << " kg\n";
     remove(TMP_FILE);
     system("pause");
+    system("cls");
 }
 
 void GenerateReport() {
@@ -1153,12 +1168,14 @@ void GenerateReport() {
     if (n == 0) {
         std::cout << "Inventory is empty.\n";
         system("pause");
+        system("cls");
         return;
     }
     std::ofstream txt("inventory_report.txt");
     if (!txt) {
         std::cout << "Error creating report!\n";
         system("pause");
+        system("cls");
         return;
     }
     txt << "===== INVENTORY REPORT =====\n";
@@ -1187,6 +1204,7 @@ void GenerateReport() {
     txt.close();
     std::cout << "Report saved to 'inventory_report.txt'\n";
     system("pause");
+    system("cls");
 }
 
 void HelpWithOverload() {
@@ -1194,6 +1212,7 @@ void HelpWithOverload() {
     if (n == 0) {
         std::cout << "Inventory is empty.\n";
         system("pause");
+        system("cls");
         return;
     }
     int worstIdx = -1;
@@ -1223,4 +1242,5 @@ void HelpWithOverload() {
         std::cout << "Consider dropping this item first!\n";
     }
     system("pause");
+    system("cls");
 }
