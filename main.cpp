@@ -53,7 +53,7 @@ void ReadLine(char* buffer, int size);
 // Проверяет, содержит ли строка только пробелы или табуляции.
 bool IsStringEmpty(const char* str);
 // Возвращает количество записей в бинарном файле инвентаря.
-int GetRecordCount();
+int GetRecordCount(const char* filename = FILENAME);
 // Последовательно читает файл до указанной позиции и возвращает запись.
 bool ReadRecordAt(int index, Inventory& out);
 // Заменяет запись по индексу через полную перезапись файла.
@@ -63,9 +63,7 @@ void SwapRecords(int idx1, int idx2);
 // Выводит детали одной записи в виде форматированной рамки.
 void PrintItem(const Inventory& item);
 // Выводит все записи файла в виде таблицы с заголовками.
-void PrintItemTable();
-// Выводит таблицу с подсветкой выбранной строки цветом.
-void PrintItemTableWithSelection(int selectedIndex);
+void PrintItemTable(const char* filename = FILENAME, int selectedIndex = -1);
 // Ищет запись по имени последовательным проходом по файлу.
 int LinearSearchInFile(const char* name);
 // Ищет запись по имени, игнорируя указанный индекс.
@@ -88,18 +86,12 @@ void SortFileByWeight_Bubble();
 void SortFileByQuantity_Selection();
 // Сортирует файл по имени с помощью сортировки вставками.
 void SortFileByName_Insertion();
-// Универсальная сортировка файла с использованием компаратора и временных файлов.
-void SortFile_Stream(bool (*comesBefore)(const Inventory&, const Inventory&));
 // Добавляет одну запись в конец временного файла.
 void WriteToTmpFile(const Inventory& item);
 // Очищает временный файл, оставляя его пустым.
 void ClearTmpFile();
 // Выводит все записи из временного файла в детальном формате.
 void PrintTmpFile();
-// Выводит содержимое временного файла в табличном виде.
-void PrintTmpFileTable();
-// Возвращает количество записей во временном файле.
-int GetTmpRecordCount();
 // Сортирует временный файл по стоимости за единицу по убыванию.
 void SortTmpFileByCost_Desc();
 // Предоставляет меню выбора фильтра по категории.
@@ -122,6 +114,8 @@ int MainMenu();
 int SubMenu(const char* title, const char** options, int optionCount);
 // Позволяет выбрать запись из таблицы навигацией стрелками.
 int SelectItemFromTable(const char* title);
+// Универсальная навигация по списку опций с помощью стрелок.
+int NavigateList(const char** options, int count);
 
 // ==================== MAIN ====================
 int main() {
@@ -233,8 +227,8 @@ static void setColor(int color) {
 }
 
 // ==================== ФАЙЛОВЫЕ ОПЕРАЦИИ ====================
-int GetRecordCount() {
-    std::ifstream file(FILENAME, std::ios::binary | std::ios::ate);
+int GetRecordCount(const char* filename) {
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
     if (!file) 
         return 0;
     return static_cast<int>(file.tellg() / REC_SIZE);
@@ -337,8 +331,8 @@ void PrintItem(const Inventory& item) {
     std::cout << "+------------------------------------------+\n\n";
 }
 
-void PrintItemTable() {
-    int n = GetRecordCount();
+void PrintItemTable(const char* filename, int selectedIndex) {
+    int n = GetRecordCount(filename);
     if (n == 0) {
         std::cout << "Inventory is empty.\n";
         return;
@@ -347,7 +341,7 @@ void PrintItemTable() {
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
     std::cout << "| #  | Name                       | Category   | Quest    | Weight | Qty  | Total  |\n";
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
-    std::ifstream src(FILENAME, std::ios::binary);
+    std::ifstream src(filename, std::ios::binary);
     Inventory item{};
     int i = 0;
     while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
@@ -363,47 +357,8 @@ void PrintItemTable() {
         }
         char weightStr[8];
         snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
-        std::cout << "| " << std::setw(2) << i << " | " 
-                  << std::left << std::setw(26) << nameDisplay << " | "
-                  << std::left << std::setw(10) << catDisplay << " | "
-                  << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
-                  << std::setw(6) << weightStr << " | "
-                  << std::setw(4) << item.quantity << " | "
-                  << std::setw(6) << item.Full_cost() << " |\n";
-        i++;
-    }
-    src.close();
-    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
-    std::cout << "Total items: " << n << "\n\n";
-}
-
-void PrintItemTableWithSelection(int selectedIndex) {
-    int n = GetRecordCount();
-    if (n == 0) {
-        std::cout << "Inventory is empty.\n";
-        return;
-    }
-    std::cout << "\n";
-    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
-    std::cout << "| #  | Name                       | Category   | Quest    | Weight | Qty  | Total  |\n";
-    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
-    std::ifstream src(FILENAME, std::ios::binary);
-    Inventory item{};
-    int i = 0;
-    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
-        char nameDisplay[25];
-        char catDisplay[11];
-        strncpy_s(nameDisplay, item.item_name, 24);
-        nameDisplay[24] = '\0';
-        if (IsStringEmpty(item.category))
-            strcpy_s(catDisplay, "(none)");
-        else {
-            strncpy_s(catDisplay, item.category, 10);
-            catDisplay[10] = '\0';
-        }
-        char weightStr[8];
-        snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
-        if (i == selectedIndex) {
+        
+        if (selectedIndex >= 0 && i == selectedIndex) {
             setColor(14);
             std::cout << "| " << std::setw(2) << i << " | " 
                       << std::left << std::setw(26) << nameDisplay << " | "
@@ -414,7 +369,7 @@ void PrintItemTableWithSelection(int selectedIndex) {
                       << std::setw(6) << item.Full_cost() << " |\n";
             setColor(7);
         }
-        else
+        else {
             std::cout << "| " << std::setw(2) << i << " | " 
                       << std::left << std::setw(26) << nameDisplay << " | "
                       << std::left << std::setw(10) << catDisplay << " | "
@@ -422,14 +377,44 @@ void PrintItemTableWithSelection(int selectedIndex) {
                       << std::setw(6) << weightStr << " | "
                       << std::setw(4) << item.quantity << " | "
                       << std::setw(6) << item.Full_cost() << " |\n";
+        }
         i++;
     }
     src.close();
     std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
-    std::cout << "Total items: " << n << " | Use UP/DOWN arrows to select, ENTER to confirm\n\n";
+    if (selectedIndex >= 0)
+        std::cout << "Total items: " << n << " | Use UP/DOWN arrows to select, ENTER to confirm\n\n";
+    else
+        std::cout << "Total items: " << n << "\n\n";
 }
 
 // ==================== НАВИГАЦИЯ И МЕНЮ ====================
+int NavigateList(const char** options, int count) {
+    int choice = 0;
+    while (true) {
+        for (int i = 0; i < count; i++) {
+            if (i == choice) {
+                setColor(14);
+                std::cout << " > " << options[i] << "\n";
+                setColor(7);
+            }
+            else
+                std::cout << "   " << options[i] << "\n";
+        }
+        int key = _getch();
+        if (key == 224 || key == 0) {
+            key = _getch();
+            if (key == 72) 
+                choice = (choice - 1 + count) % count;
+            else if (key == 80) 
+                choice = (choice + 1) % count;
+        }
+        else if (key == 13) {
+            return choice;
+        }
+    }
+}
+
 int SelectItemFromTable(const char* title) {
     int n = GetRecordCount();
     if (n == 0) return -1;
@@ -438,7 +423,7 @@ int SelectItemFromTable(const char* title) {
         system("cls");
         std::cout << "=== " << title << " ===\n";
         std::cout << "Records in file: " << n << "\n";
-        PrintItemTableWithSelection(selectedIndex);
+        PrintItemTable(FILENAME, selectedIndex);
         int key = _getch();
         if (key == 224 || key == 0) {
             key = _getch();
@@ -454,36 +439,6 @@ int SelectItemFromTable(const char* title) {
         else if (key == 27) {
             system("cls");
             return -1;
-        }
-    }
-}
-
-int SubMenu(const char* title, const char** options, int optionCount) {
-    int choice = 0;
-    while (true) {
-        system("cls");
-        std::cout << "=== " << title << " ===\n";
-        std::cout << "Records in file: " << GetRecordCount() << "\n\n";
-        for (int i = 0; i < optionCount; i++) {
-            if (i == choice) {
-                setColor(14);
-                std::cout << " > " << options[i] << "\n";
-                setColor(7);
-            }
-            else
-                std::cout << "   " << options[i] << "\n";
-        }
-        int key = _getch();
-        if (key == 224 || key == 0) {
-            key = _getch();
-            if (key == 72) 
-                choice = (choice - 1 + optionCount) % optionCount;
-            else if (key == 80) 
-                choice = (choice + 1) % optionCount;
-        }
-        else if (key == 13) {
-            system("cls");
-            return choice;
         }
     }
 }
@@ -511,27 +466,20 @@ int MainMenu() {
         system("cls");
         std::cout << "=== INVENTORY MANAGER ===\n";
         std::cout << "Records in file: " << GetRecordCount() << "\n\n";
-        for (int i = 0; i < MENU_SIZE; i++) {
-            if (i == choice) {
-                setColor(14);
-                std::cout << " > " << menu[i] << "\n";
-                setColor(7);
-            }
-            else
-                std::cout << "   " << menu[i] << "\n";
-        }
-        int key = _getch();
-        if (key == 224 || key == 0) {
-            key = _getch();
-            if (key == 72) 
-                choice = (choice - 1 + MENU_SIZE) % MENU_SIZE;
-            else if (key == 80) 
-                choice = (choice + 1) % MENU_SIZE;
-        }
-        else if (key == 13) {
-            system("cls");
-            return choice;
-        }
+        choice = NavigateList(menu, MENU_SIZE);
+        system("cls");
+        return choice;
+    }
+}
+
+int SubMenu(const char* title, const char** options, int optionCount) {
+    while (true) {
+        system("cls");
+        std::cout << "=== " << title << " ===\n";
+        std::cout << "Records in file: " << GetRecordCount() << "\n\n";
+        int choice = NavigateList(options, optionCount);
+        system("cls");
+        return choice;
     }
 }
 
@@ -546,42 +494,24 @@ int SelectCategoryForSearch(char* category, int size) {
     while (true) {
         system("cls");
         std::cout << "=== CATEGORY FILTER ===\n\n";
-        for (int i = 0; i < CAT_MENU_SIZE; i++) {
-            if (i == choice) {
-                setColor(14);
-                std::cout << " > " << catMenu[i] << "\n";
-                setColor(7);
-            }
-            else 
-                std::cout << "   " << catMenu[i] << "\n";
-        }
-        int key = _getch();
-        if (key == 224 || key == 0) {
-            key = _getch();
-            if (key == 72) 
-                choice = (choice - 1 + CAT_MENU_SIZE) % CAT_MENU_SIZE;
-            else if (key == 80) 
-                choice = (choice + 1) % CAT_MENU_SIZE;
-        }
-        else if (key == 13) {
-            system("cls");
-            if (choice == 0) {
-                std::cout << "Enter category name: ";
-                ReadLine(category, size);
-                if (IsStringEmpty(category)) {
-                    memset(category, 0, size);
-                    return 0;
-                }
-                return 1; 
-            }
-            else if (choice == 1) {
+        choice = NavigateList(catMenu, CAT_MENU_SIZE);
+        system("cls");
+        if (choice == 0) {
+            std::cout << "Enter category name: ";
+            ReadLine(category, size);
+            if (IsStringEmpty(category)) {
                 memset(category, 0, size);
-                return 0; 
+                return 0;
             }
-            else {
-                memset(category, 0, size);
-                return 2;
-            }
+            return 1; 
+        }
+        else if (choice == 1) {
+            memset(category, 0, size);
+            return 0; 
+        }
+        else {
+            memset(category, 0, size);
+            return 2;
         }
     }
 }
@@ -1010,42 +940,6 @@ void SortFileByName_Insertion() {
     system("pause");
 }
 
-void SortFile_Stream(bool (*comesBefore)(const Inventory&, const Inventory&)) {
-    const char* SORTED_FILE = TMP_FILE;
-    std::ifstream src(FILENAME, std::ios::binary);
-    if (!src) 
-        return;
-    std::ofstream initSorted(SORTED_FILE, std::ios::binary | std::ios::trunc);
-    initSorted.close();
-    Inventory item{};
-    while (src.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
-        std::ifstream sortedIn(SORTED_FILE, std::ios::binary);
-        std::ofstream workOut(WORK_FILE, std::ios::binary | std::ios::trunc);
-        if (!workOut) {
-            sortedIn.close();
-            break;
-        }
-        bool inserted = false;
-        Inventory current{};
-        while (sortedIn.read(reinterpret_cast<char*>(&current), REC_SIZE)) {
-            if (!inserted && comesBefore(item, current)) {
-                workOut.write(reinterpret_cast<const char*>(&item), REC_SIZE);
-                inserted = true;
-            }
-            workOut.write(reinterpret_cast<const char*>(&current), REC_SIZE);
-        }
-        if (!inserted)
-            workOut.write(reinterpret_cast<const char*>(&item), REC_SIZE);
-        sortedIn.close();
-        workOut.close();
-        remove(SORTED_FILE);
-        rename(WORK_FILE, SORTED_FILE);
-    }
-    src.close();
-    remove(FILENAME);
-    rename(SORTED_FILE, FILENAME);
-}
-
 void WriteToTmpFile(const Inventory& item) {
     std::ofstream tmp(TMP_FILE, std::ios::binary | std::ios::app);
     if (tmp) tmp.write(reinterpret_cast<const char*>(&item), REC_SIZE);
@@ -1056,56 +950,11 @@ void ClearTmpFile() {
 }
 
 void PrintTmpFile() {
-    std::ifstream tmp(TMP_FILE, std::ios::binary);
-    if (!tmp) 
-        return;
-    Inventory item{};
-    while (tmp.read(reinterpret_cast<char*>(&item), REC_SIZE))
-        PrintItem(item);
-    tmp.close();
-}
-
-void PrintTmpFileTable() {
-    std::ifstream tmp(TMP_FILE, std::ios::binary);
-    if (!tmp) return;
-    std::cout << "\n";
-    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
-    std::cout << "| #  | Name                       | Category   | Quest    | Weight | Qty  | Total  |\n";
-    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
-    Inventory item{};
-    int i = 0;
-    while (tmp.read(reinterpret_cast<char*>(&item), REC_SIZE)) {
-        char nameDisplay[25];
-        char catDisplay[11];
-        strncpy_s(nameDisplay, item.item_name, 24);
-        nameDisplay[24] = '\0';
-        if (IsStringEmpty(item.category))
-            strcpy_s(catDisplay, "(none)");
-        else {
-            strncpy_s(catDisplay, item.category, 10);
-            catDisplay[10] = '\0';
-        }
-        char weightStr[8];
-        snprintf(weightStr, sizeof(weightStr), "%.2f", item.weight);
-        std::cout << "| " << std::setw(2) << i << " | " 
-                  << std::left << std::setw(26) << nameDisplay << " | "
-                  << std::left << std::setw(10) << catDisplay << " | "
-                  << std::left << std::setw(8) << (item.quest ? "Yes" : "No") << " | "
-                  << std::setw(6) << weightStr << " | "
-                  << std::setw(4) << item.quantity << " | "
-                  << std::setw(6) << item.Full_cost() << " |\n";
-        i++;
-    }
-    std::cout << "+----+----------------------------+------------+----------+--------+------+--------+\n";
-    std::cout << "Total items: " << i << "\n\n";
-    tmp.close();
+    PrintItemTable(TMP_FILE);
 }
 
 int GetTmpRecordCount() {
-    std::ifstream tmp(TMP_FILE, std::ios::binary | std::ios::ate);
-    if (!tmp) 
-        return 0;
-    return static_cast<int>(tmp.tellg() / REC_SIZE);
+    return GetRecordCount(TMP_FILE);
 }
 
 void SortTmpFileByCost_Desc() {
@@ -1202,7 +1051,7 @@ void SearchByWeightRangeAndCategory() {
     else
         std::cout << "Filter: All categories\n";
     std::cout << "Weight range: " << std::fixed << std::setprecision(2) << low << " - " << high << " kg\n\n";
-    PrintTmpFileTable();
+    PrintItemTable(TMP_FILE);
     remove(TMP_FILE);
     system("pause");
 }
