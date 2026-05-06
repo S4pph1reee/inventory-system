@@ -56,7 +56,7 @@ bool IsStringEmpty(const char* str);
 int GetRecordCount();
 // Последовательно читает файл до указанной позиции и возвращает запись.
 bool ReadRecordAt(int index, Inventory& out);
-// Заменяет запись по индексу через полную перезапись файла без seekg.
+// Заменяет запись по индексу через полную перезапись файла.
 bool WriteRecordAt(int index, const Inventory& in);
 // Меняет местами две записи в файле путём последовательного копирования.
 void SwapRecords(int idx1, int idx2);
@@ -82,11 +82,11 @@ void EditItem();
 void DeleteItem();
 // Выводит всё содержимое файла с заголовком и ожиданием нажатия.
 void PrintAllFromFile();
-// Сортирует файл по весу с помощью потоковой вставки.
+// Сортирует файл по весу с помощью пузырьковой сортировки.
 void SortFileByWeight_Bubble();
-// Сортирует файл по количеству с помощью потоковой вставки.
+// Сортирует файл по количеству с помощью сортировки выбором.
 void SortFileByQuantity_Selection();
-// Сортирует файл по имени с помощью потоковой вставки.
+// Сортирует файл по имени с помощью сортировки вставками.
 void SortFileByName_Insertion();
 // Универсальная сортировка файла с использованием компаратора и временных файлов.
 void SortFile_Stream(bool (*comesBefore)(const Inventory&, const Inventory&));
@@ -888,9 +888,19 @@ void SortFileByWeight_Bubble() {
         system("pause"); 
         return; 
     }
-    SortFile_Stream([](const Inventory& a, const Inventory& b) -> bool {
-        return a.weight < b.weight;
-    });
+    for (int i = 0; i < n - 1; ++i) {
+        bool swapped = false;
+        for (int j = 0; j < n - i - 1; ++j) {
+            Inventory a{}, b{};
+            if (!ReadRecordAt(j, a) || !ReadRecordAt(j + 1, b)) 
+                continue;
+            if (a.weight > b.weight) {
+                SwapRecords(j, j + 1);
+                swapped = true;
+            }
+        }
+        if (!swapped) break;
+    }
     std::cout << "Sorted by weight!\n";
     system("pause");
 }
@@ -946,9 +956,24 @@ void SortFileByQuantity_Selection() {
         system("pause"); 
         return; 
     }
-    SortFile_Stream([](const Inventory& a, const Inventory& b) -> bool {
-        return a.quantity < b.quantity;
-    });
+    for (int i = 0; i < n - 1; ++i) {
+        int minIdx = i;
+        Inventory minItem{};
+        if (!ReadRecordAt(i, minItem)) continue;
+        
+        for (int j = i + 1; j < n; ++j) {
+            Inventory curr{};
+            if (ReadRecordAt(j, curr)) {
+                if (curr.quantity < minItem.quantity) {
+                    minItem = curr;
+                    minIdx = j;
+                }
+            }
+        }
+        if (minIdx != i) {
+            SwapRecords(i, minIdx);
+        }
+    }
     std::cout << "Sorted by quantity (selection)!\n";
     PrintItemTable();
     system("pause");
@@ -961,9 +986,25 @@ void SortFileByName_Insertion() {
         system("pause"); 
         return; 
     }
-    SortFile_Stream([](const Inventory& a, const Inventory& b) -> bool {
-        return _stricmp(a.item_name, b.item_name) < 0;
-    });
+    for (int i = 1; i < n; ++i) {
+        Inventory key{};
+        if (!ReadRecordAt(i, key)) continue;
+        
+        int j = i - 1;
+        while (j >= 0) {
+            Inventory curr{};
+            if (!ReadRecordAt(j, curr)) break;
+            
+            if (_stricmp(curr.item_name, key.item_name) > 0) {
+                WriteRecordAt(j + 1, curr);
+                --j;
+            }
+            else {
+                break;
+            }
+        }
+        WriteRecordAt(j + 1, key);
+    }
     std::cout << "Sorted by name (insertion)!\n";
     PrintItemTable();
     system("pause");
